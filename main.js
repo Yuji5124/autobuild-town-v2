@@ -33,8 +33,8 @@
   const inspectingMessage = "これ、つかえそう。";
   const carryingMessage = "町はまだ、何になるのか考えている。";
   const heroMaterialMessage = "中から見ると、材料がただの山ではなく、置かれた場所に見える。";
-  const goalReachedMessage = "材料が集まってきた。町は、まだ何を作るか考えている。";
-  const prepProgressMessage = "町の中心で、準備が少しだけ進んだ。";
+  const goalReachedMessage = "何かになりそう。でも、まだ名前がない。";
+  const prepProgressMessage = "町の中心で、何かが少しずつ形になりはじめた。";
   const gatherMessages = [
     "材料が、少しずつ町の中心に集まっていく。",
     "まだ建物にはならない。でも、何かが始まりそうだ。",
@@ -61,6 +61,15 @@
     { id: "left-yard", x: -2.8, z: 0.5, accent: 0x4d96ff, flag: 0xff6b6b, cols: 3, rows: 2, spacing: 0.46, platformTop: 0.19, slots: [], blocks: [] },
     { id: "right-yard", x: 3.0, z: -0.5, accent: 0xff8f5a, flag: 0xffcc4d, cols: 3, rows: 2, spacing: 0.46, platformTop: 0.19, slots: [], blocks: [] },
     { id: "back-yard", x: -0.6, z: -2.95, accent: 0x9d8cff, flag: 0x6bcb77, cols: 3, rows: 2, spacing: 0.46, platformTop: 0.19, slots: [], blocks: [] },
+  ];
+  const centralBuildCenter = { x: 0.1, z: -0.1 };
+  const centralBuildBaseTop = 0.32;
+  const centralBuildPillarTop = 0.96;
+  const centralBuildCorners = [
+    [-0.62, -0.44],
+    [0.62, -0.44],
+    [-0.62, 0.44],
+    [0.62, 0.44],
   ];
   const workerPlaceLines = [
     "ここに おこう",
@@ -395,11 +404,13 @@
   }
 
   function createPreparationProps() {
-    addPreparationStage(3, buildPrepFlag(-0.95, 1.1, 0xff6b6b));
-    addPreparationStage(6, buildPrepFence(1.55, 0.55));
-    addPreparationStage(9, buildPrepSlab(0.2, -0.05));
-    addPreparationStage(12, buildPrepGuideFrame(0.1, -0.05));
-    addPreparationStage(15, buildPrepCenterFlag(0.1, -0.45));
+    // 中央土台が材料の集まりに合わせて少しずつ「作りかけの何か」になっていく。
+    // どの段階も完成はさせず、骨組みのまま止める。
+    addPreparationStage(3, buildStageBase());
+    addPreparationStage(6, buildStagePillars());
+    addPreparationStage(9, buildStageWalls());
+    addPreparationStage(12, buildStageScaffold());
+    addPreparationStage(15, buildStageFrame());
   }
 
   function addPreparationStage(threshold, object) {
@@ -408,125 +419,179 @@
     preparationStages.push({ threshold, object, revealed: false });
   }
 
-  function buildPrepFlag(x, z, color) {
+  function newCentralGroup() {
     const group = new THREE.Group();
-    group.position.set(x, 0, z);
-
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.03, 0.03, 0.6, 10),
-      new THREE.MeshStandardMaterial({ color: 0xb0782f, roughness: 0.7 })
-    );
-    pole.position.y = 0.4;
-    pole.castShadow = true;
-    group.add(pole);
-
-    const flag = new THREE.Mesh(
-      new THREE.BoxGeometry(0.3, 0.18, 0.02),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
-    );
-    flag.position.set(0.17, 0.6, 0);
-    flag.castShadow = true;
-    group.add(flag);
+    group.position.set(centralBuildCenter.x, 0, centralBuildCenter.z);
     return group;
   }
 
-  function buildPrepFence(x, z) {
-    const group = new THREE.Group();
-    group.position.set(x, 0, z);
+  // 材料 3個: 低い台が増える
+  function buildStageBase() {
+    const group = newCentralGroup();
 
-    const material = new THREE.MeshStandardMaterial({ color: 0xf7f0c9, roughness: 0.75 });
-    [-0.45, 0.45].forEach((oz) => {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.1), material);
-      post.position.set(0, 0.25, oz);
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(1.5, 0.2, 1.08),
+      new THREE.MeshStandardMaterial({ color: 0xe7c98a, roughness: 0.82 })
+    );
+    base.position.y = 0.22;
+    base.castShadow = true;
+    base.receiveShadow = true;
+    group.add(base);
+
+    const step = new THREE.Mesh(
+      new THREE.BoxGeometry(0.92, 0.12, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xf3d68a, roughness: 0.84 })
+    );
+    step.position.set(-0.18, 0.38, 0.16);
+    step.rotation.y = 0.08;
+    step.castShadow = true;
+    step.receiveShadow = true;
+    group.add(step);
+
+    return group;
+  }
+
+  // 材料 6個: 小さな柱が立つ
+  function buildStagePillars() {
+    const group = newCentralGroup();
+    const material = new THREE.MeshStandardMaterial({ color: 0xd9b27a, roughness: 0.7 });
+    const pillarHeight = (centralBuildPillarTop - centralBuildBaseTop) * 1.0;
+
+    centralBuildCorners.forEach(([ox, oz], index) => {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.15, pillarHeight, 0.15), material);
+      pillar.position.set(ox, centralBuildBaseTop + pillarHeight / 2, oz);
+      pillar.rotation.y = index % 2 === 0 ? 0.05 : -0.05;
+      pillar.castShadow = true;
+      group.add(pillar);
+    });
+
+    return group;
+  }
+
+  // 材料 9個: 仮の壁が少し出る（高さが不ぞろいで未完成）
+  function buildStageWalls() {
+    const group = newCentralGroup();
+    const material = new THREE.MeshStandardMaterial({ color: 0xfae7bd, roughness: 0.8 });
+
+    const backLeft = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.4, 0.1), material);
+    backLeft.position.set(-0.34, centralBuildBaseTop + 0.2, -0.44);
+    backLeft.castShadow = true;
+    group.add(backLeft);
+
+    const backRight = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.1), material);
+    backRight.position.set(0.42, centralBuildBaseTop + 0.15, -0.44);
+    backRight.castShadow = true;
+    group.add(backRight);
+
+    const sideWall = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.36, 0.56), material);
+    sideWall.position.set(-0.62, centralBuildBaseTop + 0.18, 0.06);
+    sideWall.castShadow = true;
+    group.add(sideWall);
+
+    return group;
+  }
+
+  // 材料 12個: 足場や旗が増える
+  function buildStageScaffold() {
+    const group = newCentralGroup();
+    const woodMaterial = new THREE.MeshStandardMaterial({ color: 0xd49b4d, roughness: 0.78 });
+    const beamMaterial = new THREE.MeshStandardMaterial({ color: 0xffdf7c, roughness: 0.72 });
+
+    [-0.12, 0.32].forEach((oz) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.92, 0.06), woodMaterial);
+      post.position.set(0.78, centralBuildBaseTop + 0.46, oz);
       post.castShadow = true;
       group.add(post);
     });
 
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 1.0), material);
-    rail.position.set(0, 0.32, 0);
-    rail.castShadow = true;
-    group.add(rail);
+    [0.55, 0.85].forEach((y) => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.5), beamMaterial);
+      rail.position.set(0.78, y, 0.1);
+      rail.castShadow = true;
+      group.add(rail);
+    });
+
+    const flagPole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.025, 0.42, 10),
+      woodMaterial
+    );
+    flagPole.position.set(-0.62, centralBuildPillarTop + 0.2, -0.44);
+    flagPole.castShadow = true;
+    group.add(flagPole);
+
+    const flag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.26, 0.16, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0xff6b6b, roughness: 0.7 })
+    );
+    flag.position.set(-0.47, centralBuildPillarTop + 0.28, -0.44);
+    flag.castShadow = true;
+    group.add(flag);
+
     return group;
   }
 
-  function buildPrepSlab(x, z) {
-    const group = new THREE.Group();
-    group.position.set(x, 0, z);
+  // 材料 15個: 未完成の「何か」の骨組みになる（完成はさせない）
+  function buildStageFrame() {
+    const group = newCentralGroup();
+    const beamMaterial = new THREE.MeshStandardMaterial({ color: 0xc99a5a, roughness: 0.65 });
+    const topY = centralBuildPillarTop;
 
-    const slab = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.2, 0.6),
-      new THREE.MeshStandardMaterial({ color: 0xffe7a6, roughness: 0.78 })
-    );
-    slab.position.set(0, 0.18, 0);
-    slab.castShadow = true;
-    slab.receiveShadow = true;
-    group.add(slab);
+    const frontBeam = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.1, 0.1), beamMaterial);
+    frontBeam.position.set(0, topY, 0.44);
+    frontBeam.castShadow = true;
+    group.add(frontBeam);
 
-    const smallSlab = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.18, 0.45),
-      new THREE.MeshStandardMaterial({ color: 0xf3d68a, roughness: 0.8 })
-    );
-    smallSlab.position.set(0.45, 0.16, 0.2);
-    smallSlab.rotation.y = 0.2;
-    smallSlab.castShadow = true;
-    group.add(smallSlab);
-    return group;
-  }
+    const backBeam = frontBeam.clone();
+    backBeam.position.z = -0.44;
+    group.add(backBeam);
 
-  function buildPrepGuideFrame(x, z) {
-    const group = new THREE.Group();
-    group.position.set(x, 0, z);
+    const leftBeam = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.98), beamMaterial);
+    leftBeam.position.set(-0.62, topY, 0);
+    leftBeam.castShadow = true;
+    group.add(leftBeam);
 
-    const box = new THREE.BoxGeometry(1.7, 0.95, 1.15);
-    const fill = new THREE.Mesh(
-      box,
+    const rightBeam = leftBeam.clone();
+    rightBeam.position.x = 0.62;
+    group.add(rightBeam);
+
+    const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.98), beamMaterial);
+    ridge.position.set(0, topY + 0.42, 0);
+    ridge.castShadow = true;
+    group.add(ridge);
+
+    [-1, 1].forEach((side) => {
+      const rafter = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.74, 0.07), beamMaterial);
+      rafter.position.set(side * 0.31, topY + 0.21, 0.44);
+      rafter.rotation.z = side * 0.7;
+      rafter.castShadow = true;
+      group.add(rafter);
+
+      const rafterBack = rafter.clone();
+      rafterBack.position.z = -0.44;
+      group.add(rafterBack);
+    });
+
+    const ghostBox = new THREE.BoxGeometry(1.34, 0.5, 0.98);
+    const ghost = new THREE.Mesh(
+      ghostBox,
       new THREE.MeshStandardMaterial({
         color: 0x8fd3ff,
         transparent: true,
-        opacity: 0.14,
+        opacity: 0.12,
         roughness: 0.4,
         depthWrite: false,
       })
     );
-    fill.position.y = 0.6;
-    group.add(fill);
+    ghost.position.y = topY + 0.18;
+    group.add(ghost);
 
     const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(box),
-      new THREE.LineBasicMaterial({ color: 0x4d96ff, transparent: true, opacity: 0.6 })
+      new THREE.EdgesGeometry(ghostBox),
+      new THREE.LineBasicMaterial({ color: 0x4d96ff, transparent: true, opacity: 0.5 })
     );
-    edges.position.y = 0.6;
+    edges.position.y = topY + 0.18;
     group.add(edges);
-    return group;
-  }
 
-  function buildPrepCenterFlag(x, z) {
-    const group = new THREE.Group();
-    group.position.set(x, 0, z);
-
-    const base = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.2, 0.24, 0.14, 16),
-      new THREE.MeshStandardMaterial({ color: 0xd8b75a, roughness: 0.85 })
-    );
-    base.position.y = 0.1;
-    base.castShadow = true;
-    group.add(base);
-
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.035, 0.035, 1.1, 12),
-      new THREE.MeshStandardMaterial({ color: 0xb0782f, roughness: 0.7 })
-    );
-    pole.position.y = 0.66;
-    pole.castShadow = true;
-    group.add(pole);
-
-    const flag = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.26, 0.02),
-      new THREE.MeshStandardMaterial({ color: 0xff8f5a, roughness: 0.7 })
-    );
-    flag.position.set(0.22, 1.05, 0);
-    flag.castShadow = true;
-    group.add(flag);
     return group;
   }
 
@@ -1518,6 +1583,17 @@
     if (distanceFromHero < 1.35) {
       z -= 1.45;
       x += x < heroStartPosition.x ? -0.45 : 0.45;
+    }
+
+    // 中央の作りかけ構造の上には積まない。材料は構造の周りにリング状に集まる。
+    const buildDx = x - centralBuildCenter.x;
+    const buildDz = z - centralBuildCenter.z;
+    if (Math.abs(buildDx) < 0.95 && Math.abs(buildDz) < 0.7) {
+      if (Math.abs(buildDx) / 0.95 >= Math.abs(buildDz) / 0.7) {
+        x = centralBuildCenter.x + (buildDx >= 0 ? 1 : -1) * randomBetween(0.95, 1.5);
+      } else {
+        z = centralBuildCenter.z + (buildDz >= 0 ? 1 : -1) * randomBetween(0.7, 1.3);
+      }
     }
 
     return {
