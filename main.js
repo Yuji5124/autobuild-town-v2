@@ -16,6 +16,14 @@
   const workerSpeech = document.getElementById("worker-speech");
   const modeLabel = document.getElementById("mode-label");
   const messageText = document.getElementById("message-text");
+  const heroControls = document.getElementById("hero-controls");
+  const heroTouchPanel = document.getElementById("hero-touch");
+  const heroTouchButtons = {
+    forward: document.getElementById("hero-touch-forward"),
+    back: document.getElementById("hero-touch-back"),
+    left: document.getElementById("hero-touch-left"),
+    right: document.getElementById("hero-touch-right"),
+  };
 
   const MODES = {
     OUTSIDE: "outside",
@@ -33,6 +41,8 @@
   const inspectingMessage = "これ、つかえそう。";
   const carryingMessage = "町はまだ、何になるのか考えている。";
   const heroMaterialMessage = "中から見ると、材料がただの山ではなく、置かれた場所に見える。";
+  const heroEnterMessage = "中に入ると、同じ町が少し違って見える。";
+  const heroWalkMessage = "町の中を歩くと、ブロックや骨組みが思ったより大きく見える。";
   const goalReachedMessage = "何かになりそう。でも、まだ名前がない。";
   const prepProgressMessage = "町の中心で、何かが少しずつ形になりはじめた。";
   const gatherMessages = [
@@ -43,8 +53,12 @@
 
   const outsideCameraPosition = new THREE.Vector3(8.8, 5.9, 9.4);
   const outsideTarget = new THREE.Vector3(0.2, 1.05, -0.15);
-  const heroStartPosition = new THREE.Vector3(0.9, 1.05, 2.7);
-  const heroLookTarget = new THREE.Vector3(3.45, 3.2, -0.55);
+  const heroStartPosition = new THREE.Vector3(0.9, 0, 2.7);
+  const heroInitialLook = new THREE.Vector3(3.0, 0.6, -0.8);
+  const heroEyeHeight = 1.15;
+  const heroMoveSpeed = 2.2;
+  const heroTurnSpeed = 1.8;
+  const heroBound = 5.6;
   const fallingBlockLimit = 80;
   const fallingPalette = [
     0xff6b6b, 0xffcc4d, 0x4d96ff, 0x6bcb77, 0xff8f5a,
@@ -100,8 +114,12 @@
   let renderer;
   let controls;
   let currentMode = MODES.OUTSIDE;
-  let heroOffset = 0;
-  let heroLookSway = 0;
+  const heroPos = new THREE.Vector3(0.9, 0, 2.7);
+  let heroYaw = 0;
+  let heroWalkAnnounced = false;
+  let heroDragging = false;
+  let heroDragLastX = 0;
+  const heroKeys = { forward: false, back: false, left: false, right: false };
   let rainEnabled = true;
   let workersEnabled = true;
   let nextBlockDropAt = 0;
@@ -141,7 +159,11 @@
   });
   workerToggleButton.addEventListener("click", toggleWorkers);
   window.addEventListener("resize", resizeRenderer);
-  window.addEventListener("keydown", handleHeroKeys);
+  window.addEventListener("keydown", handleHeroKeyDown);
+  window.addEventListener("keyup", handleHeroKeyUp);
+  window.addEventListener("pointermove", handleHeroPointerMove);
+  window.addEventListener("pointerup", handleHeroPointerUp);
+  bindHeroTouchButtons();
 
   function initScene() {
     scene = new THREE.Scene();
@@ -158,6 +180,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
     sceneContainer.appendChild(renderer.domElement);
+    renderer.domElement.addEventListener("pointerdown", handleHeroPointerDown);
 
     controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.target.copy(outsideTarget);
@@ -1727,7 +1750,11 @@
       controls.enabled = isOutside;
     }
 
+    heroControls.classList.toggle("is-hidden", isOutside);
+    heroTouchPanel.classList.toggle("is-hidden", isOutside);
+
     if (isOutside) {
+      clearHeroKeys();
       applyOutsideCamera();
       if (options.showInitialMessage) {
         setOpeningMessages();
@@ -1735,8 +1762,8 @@
         setTimedMessage(outsideMessage);
       }
     } else {
-      applyHeroCamera();
-      setTimedMessage(heroMessage, heroMaterialMessage);
+      resetHeroPose();
+      setTimedMessage(heroEnterMessage, heroMaterialMessage);
     }
   }
 
@@ -1778,10 +1805,8 @@
       return;
     }
 
-    heroOffset = 0;
-    heroLookSway = 0;
-    applyHeroCamera();
-    messageText.textContent = heroMessage;
+    resetHeroPose();
+    messageText.textContent = heroEnterMessage;
   }
 
   function applyOutsideCamera() {
@@ -1794,31 +1819,161 @@
     }
   }
 
-  function applyHeroCamera() {
-    const position = heroStartPosition.clone();
-    position.x += heroOffset;
-    camera.position.copy(position);
-
-    const target = heroLookTarget.clone();
-    target.x += heroOffset * 0.28 + heroLookSway;
-    camera.lookAt(target);
+  function resetHeroPose() {
+    heroPos.copy(heroStartPosition);
+    heroYaw = Math.atan2(heroInitialLook.x - heroPos.x, heroInitialLook.z - heroPos.z);
+    heroWalkAnnounced = false;
+    clearHeroKeys();
+    applyHeroCamera();
   }
 
-  function handleHeroKeys(event) {
+  function getHeroForward() {
+    return { x: Math.sin(heroYaw), z: Math.cos(heroYaw) };
+  }
+
+  function applyHeroCamera() {
+    camera.position.set(heroPos.x, heroEyeHeight, heroPos.z);
+    const forward = getHeroForward();
+    // 子ども目線で、少しだけ上を見るように構える（見上げすぎない）。
+    camera.lookAt(
+      heroPos.x + forward.x * 2.2,
+      heroEyeHeight + 0.32,
+      heroPos.z + forward.z * 2.2
+    );
+  }
+
+  function updateHeroMovement(delta) {
     if (currentMode !== MODES.HERO) {
       return;
     }
 
-    const key = event.key.toLowerCase();
-    if (key !== "arrowleft" && key !== "arrowright" && key !== "a" && key !== "d") {
+    let changed = false;
+
+    if (heroKeys.left) {
+      heroYaw += heroTurnSpeed * delta;
+      changed = true;
+    }
+    if (heroKeys.right) {
+      heroYaw -= heroTurnSpeed * delta;
+      changed = true;
+    }
+
+    let drive = 0;
+    if (heroKeys.forward) drive += 1;
+    if (heroKeys.back) drive -= 1;
+
+    if (drive !== 0) {
+      const forward = getHeroForward();
+      heroPos.x = THREE.MathUtils.clamp(heroPos.x + forward.x * drive * heroMoveSpeed * delta, -heroBound, heroBound);
+      heroPos.z = THREE.MathUtils.clamp(heroPos.z + forward.z * drive * heroMoveSpeed * delta, -heroBound, heroBound);
+      changed = true;
+      announceHeroWalk();
+    }
+
+    if (changed) {
+      applyHeroCamera();
+    }
+  }
+
+  function announceHeroWalk() {
+    if (heroWalkAnnounced) {
+      return;
+    }
+    heroWalkAnnounced = true;
+    setTimedMessage(heroWalkMessage);
+  }
+
+  function heroKeyFlag(key) {
+    switch (key.toLowerCase()) {
+      case "w":
+      case "arrowup":
+        return "forward";
+      case "s":
+      case "arrowdown":
+        return "back";
+      case "a":
+      case "arrowleft":
+        return "left";
+      case "d":
+      case "arrowright":
+        return "right";
+      default:
+        return null;
+    }
+  }
+
+  function clearHeroKeys() {
+    heroKeys.forward = false;
+    heroKeys.back = false;
+    heroKeys.left = false;
+    heroKeys.right = false;
+  }
+
+  function handleHeroKeyDown(event) {
+    if (currentMode !== MODES.HERO) {
+      return;
+    }
+
+    const flag = heroKeyFlag(event.key);
+    if (!flag) {
       return;
     }
 
     event.preventDefault();
-    const direction = key === "arrowleft" || key === "a" ? -1 : 1;
-    heroOffset = THREE.MathUtils.clamp(heroOffset + direction * 0.25, -1.2, 1.2);
-    heroLookSway = THREE.MathUtils.clamp(heroLookSway + direction * 0.16, -0.32, 0.32);
+    heroKeys[flag] = true;
+  }
+
+  function handleHeroKeyUp(event) {
+    const flag = heroKeyFlag(event.key);
+    if (!flag) {
+      return;
+    }
+    heroKeys[flag] = false;
+  }
+
+  function handleHeroPointerDown(event) {
+    if (currentMode !== MODES.HERO) {
+      return;
+    }
+    heroDragging = true;
+    heroDragLastX = event.clientX;
+  }
+
+  function handleHeroPointerMove(event) {
+    if (!heroDragging || currentMode !== MODES.HERO) {
+      return;
+    }
+    const dx = event.clientX - heroDragLastX;
+    heroDragLastX = event.clientX;
+    heroYaw -= dx * 0.005;
     applyHeroCamera();
+  }
+
+  function handleHeroPointerUp() {
+    heroDragging = false;
+  }
+
+  function bindHeroTouchButtons() {
+    Object.keys(heroTouchButtons).forEach((flag) => {
+      const button = heroTouchButtons[flag];
+      if (!button) {
+        return;
+      }
+
+      const press = (event) => {
+        event.preventDefault();
+        heroKeys[flag] = true;
+      };
+      const release = (event) => {
+        event.preventDefault();
+        heroKeys[flag] = false;
+      };
+
+      button.addEventListener("pointerdown", press);
+      button.addEventListener("pointerup", release);
+      button.addEventListener("pointerleave", release);
+      button.addEventListener("pointercancel", release);
+    });
   }
 
   function resizeRenderer() {
@@ -1845,10 +2000,7 @@
     updateFallingBlockRain(elapsed, delta);
     updateWorkerAgents(elapsed, delta);
 
-    if (currentMode === MODES.HERO && Math.abs(heroLookSway) > 0.001) {
-      heroLookSway *= 0.92;
-      applyHeroCamera();
-    }
+    updateHeroMovement(delta);
 
     if (controls && controls.enabled) {
       controls.update();

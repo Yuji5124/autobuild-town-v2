@@ -344,6 +344,62 @@ button {
   transform: translateX(-50%) rotate(45deg);
 }
 
+.hero-controls {
+  top: 70px;
+  left: 50%;
+  max-width: calc(100vw - 36px);
+  padding: 9px 15px;
+  border: 2px solid rgba(36, 50, 71, 0.2);
+  border-radius: 8px;
+  background: rgba(217, 246, 255, 0.92);
+  box-shadow: 0 8px 18px var(--shadow);
+  font-size: clamp(0.8rem, 2.4vw, 0.95rem);
+  font-weight: 800;
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.hero-controls.is-hidden,
+.hero-touch.is-hidden {
+  display: none;
+}
+
+.hero-touch {
+  left: 18px;
+  bottom: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.hero-touch .touch-row {
+  display: flex;
+  gap: 8px;
+}
+
+.touch-button {
+  width: 58px;
+  height: 58px;
+  border: 2px solid rgba(36, 50, 71, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  box-shadow: 0 6px 14px var(--shadow);
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.touch-button:active {
+  background: var(--button);
+  border-color: #9d680d;
+}
+
 .message-window {
   left: 50%;
   bottom: 18px;

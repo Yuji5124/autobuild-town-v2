@@ -52,6 +52,19 @@
 
       <div id="worker-speech" class="worker-speech" aria-hidden="true"></div>
 
+      <div id="hero-controls" class="hud hero-controls is-hidden" aria-live="polite">
+        W/S: 前後　A/D: 向きを変える　/　矢印キーでも歩けます
+      </div>
+
+      <div id="hero-touch" class="hud hero-touch is-hidden" aria-label="主人公の移動">
+        <button id="hero-touch-forward" class="touch-button" type="button" aria-label="前に進む">前</button>
+        <div class="touch-row">
+          <button id="hero-touch-left" class="touch-button" type="button" aria-label="左を向く">左</button>
+          <button id="hero-touch-back" class="touch-button" type="button" aria-label="後ろに下がる">後</button>
+          <button id="hero-touch-right" class="touch-button" type="button" aria-label="右を向く">右</button>
+        </div>
+      </div>
+
       <div class="hud message-window" aria-live="polite">
         <p id="message-text">落ちてきた材料に、作業員たちが気づきはじめた。</p>
       </div>
