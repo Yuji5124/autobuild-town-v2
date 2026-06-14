@@ -17,11 +17,12 @@
   const outsideMessage = "外から見ると、町はまだ未完成の構造物に見える。";
   const heroMessage = "中に入ると、同じ町が少し違って見える。";
   const initialMessage = "名前のない町が、まだ何かを作りたがっている。";
+  const centralMessage = "ここに、まだ名前のない何かが作られようとしている。";
 
-  const outsideCameraPosition = new THREE.Vector3(9.5, 7.2, 10.5);
-  const outsideTarget = new THREE.Vector3(0, 0.9, 0);
-  const heroStartPosition = new THREE.Vector3(-3.5, 1.35, 4.15);
-  const heroLookTarget = new THREE.Vector3(0.25, 2.1, 0.25);
+  const outsideCameraPosition = new THREE.Vector3(8.8, 5.9, 9.4);
+  const outsideTarget = new THREE.Vector3(0.2, 1.05, -0.15);
+  const heroStartPosition = new THREE.Vector3(0.9, 1.05, 2.7);
+  const heroLookTarget = new THREE.Vector3(3.45, 3.2, -0.55);
 
   let scene;
   let camera;
@@ -29,6 +30,7 @@
   let controls;
   let currentMode = MODES.OUTSIDE;
   let heroOffset = 0;
+  let heroLookSway = 0;
   let animationStarted = false;
   let initialMessageTimer = null;
   const clock = new THREE.Clock();
@@ -72,9 +74,9 @@
     controls.target.copy(outsideTarget);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.minDistance = 5;
-    controls.maxDistance = 24;
-    controls.maxPolarAngle = Math.PI * 0.48;
+    controls.minDistance = 4.6;
+    controls.maxDistance = 19;
+    controls.maxPolarAngle = Math.PI * 0.5;
 
     addLights();
     createDioramaBase();
@@ -131,17 +133,19 @@
     }
 
     const lot = new THREE.Mesh(
-      new THREE.BoxGeometry(3.2, 0.06, 2.4),
-      new THREE.MeshStandardMaterial({ color: 0xf5d98b, roughness: 0.82 })
+      new THREE.BoxGeometry(4.1, 0.07, 3.2),
+      new THREE.MeshStandardMaterial({ color: 0xf3d68a, roughness: 0.84 })
     );
-    lot.position.set(0, 0.07, 0);
+    lot.position.set(0.1, 0.08, -0.1);
     lot.receiveShadow = true;
     scene.add(lot);
 
-    addLowFence(-1.85, -1.35, 3.7, true);
-    addLowFence(-1.85, 1.35, 3.7, true);
-    addLowFence(-1.85, -1.35, 2.7, false);
-    addLowFence(1.85, -1.35, 2.7, false);
+    addLowFence(-2.25, -1.85, 1.6, true);
+    addLowFence(0.7, -1.85, 1.75, true);
+    addLowFence(-2.25, 1.65, 3.0, true);
+    addLowFence(-2.25, -1.85, 1.35, false);
+    addLowFence(2.35, -0.35, 2.0, false);
+    createUnfinishedFoundation();
   }
 
   function addLowFence(x, z, length, horizontal) {
@@ -154,15 +158,97 @@
     scene.add(fence);
   }
 
+  function createUnfinishedFoundation() {
+    const slabMaterial = new THREE.MeshStandardMaterial({ color: 0xffefb1, roughness: 0.76 });
+    const shadowMaterial = new THREE.MeshStandardMaterial({ color: 0xd8b75a, roughness: 0.85 });
+
+    const slabs = [
+      [-0.75, -0.45, 1.35, 0.16, 0.55, 0.02],
+      [0.7, -0.45, 1.1, 0.16, 0.55, -0.03],
+      [-0.1, 0.36, 1.7, 0.16, 0.48, 0.05],
+      [-1.35, 0.55, 0.75, 0.16, 0.45, -0.08],
+      [1.25, 0.48, 0.72, 0.16, 0.45, 0.1],
+    ];
+
+    slabs.forEach(([x, z, width, height, depth, rotation]) => {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), slabMaterial);
+      slab.position.set(x, 0.18, z);
+      slab.rotation.y = rotation;
+      slab.castShadow = true;
+      slab.receiveShadow = true;
+      scene.add(slab);
+    });
+
+    const innerHole = new THREE.Mesh(
+      new THREE.BoxGeometry(1.25, 0.08, 0.82),
+      new THREE.MeshStandardMaterial({ color: 0xc7a55f, roughness: 0.9 })
+    );
+    innerHole.position.set(0.08, 0.16, -0.02);
+    innerHole.receiveShadow = true;
+    scene.add(innerHole);
+
+    const starterBlocks = [
+      [-1.55, -0.95, 0.42, 0.35, 0.42, 0x80e0a5],
+      [-1.55, -0.95, 0.36, 0.32, 0.36, 0xffcf4a],
+      [1.55, -1.02, 0.38, 0.28, 0.38, 0xff8f5a],
+      [1.58, -1.0, 0.32, 0.24, 0.32, 0x8fd3ff],
+    ];
+
+    starterBlocks.forEach(([x, z, width, height, depth, color], index) => {
+      const block = new THREE.Mesh(
+        new THREE.BoxGeometry(width, height, depth),
+        new THREE.MeshStandardMaterial({ color, roughness: 0.75 })
+      );
+      block.position.set(x, 0.28 + index % 2 * 0.26, z);
+      block.rotation.y = index % 2 === 0 ? 0.08 : -0.06;
+      block.castShadow = true;
+      block.receiveShadow = true;
+      scene.add(block);
+    });
+
+    const markerMaterial = new THREE.MeshStandardMaterial({ color: 0x4d96ff, roughness: 0.65 });
+    const markerPositions = [
+      [-2.0, -1.48],
+      [2.0, -1.48],
+      [-2.0, 1.28],
+      [2.0, 1.28],
+    ];
+
+    markerPositions.forEach(([x, z]) => {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.58, 10), markerMaterial);
+      pole.position.set(x, 0.48, z);
+      pole.castShadow = true;
+      scene.add(pole);
+
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), markerMaterial);
+      cap.position.set(x, 0.8, z);
+      cap.castShadow = true;
+      scene.add(cap);
+    });
+
+    const darkPatch = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.04, 0.32), shadowMaterial);
+    darkPatch.position.set(-0.25, 0.14, 1.05);
+    darkPatch.rotation.y = -0.12;
+    darkPatch.receiveShadow = true;
+    scene.add(darkPatch);
+  }
+
   function createTownObjects() {
     createColorBlocks();
+    createWorkInProgressDetails();
+    createOddPassage();
+    createBlockYard();
+    createSimpleCrane();
+    createRestShelter();
+    createResidentGathering();
     createHomes();
     createTower();
     createRocket();
     createRobot(-4.2, 0.1, -2.6, 0x4aa3ff);
-    createRobot(3.2, 0.1, 2.8, 0xffcc4d);
+    createRobot(2.55, 0.1, 1.65, 0xffcc4d);
+    createRobot(0.85, 0.1, -1.65, 0x6bcb77);
     createResident(-1.2, 0.1, 2.9, 0xff7f7f);
-    createResident(2.4, 0.1, -1.4, 0x7bdb83);
+    createResident(2.1, 0.1, -1.15, 0x7bdb83);
     createResident(-3.4, 0.1, 1.1, 0xb995ff);
     createResident(4.6, 0.1, -3.2, 0xffb35c);
   }
@@ -207,11 +293,11 @@
     });
   }
 
-  function addBlock(x, z, width, height, depth, color, rotation = 0) {
+  function addBlock(x, z, width, height, depth, color, rotation = 0, tilt = {}) {
     const material = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.02 });
     const block = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
     block.position.set(x, height / 2 + 0.07, z);
-    block.rotation.y = rotation;
+    block.rotation.set(tilt.x || 0, rotation, tilt.z || 0);
     block.castShadow = true;
     block.receiveShadow = true;
     scene.add(block);
@@ -233,6 +319,192 @@
         scene.add(nub);
       }
     }
+  }
+
+  function createWorkInProgressDetails() {
+    addBlock(-2.65, -1.95, 0.62, 0.46, 0.74, 0xffcc4d, -0.28, { z: -0.05 });
+    addBlock(-2.15, -1.72, 0.72, 0.35, 0.52, 0x4dd6c7, 0.42, { x: 0.04 });
+    addBlock(-2.45, -2.45, 0.48, 0.5, 0.48, 0xf58bc3, 0.18, { z: 0.08 });
+    addBlock(0.95, -2.35, 0.78, 0.42, 0.64, 0x9d8cff, -0.18, { x: -0.06 });
+    addBlock(1.38, -2.05, 0.48, 0.62, 0.5, 0xff8f5a, 0.25, { z: 0.04 });
+    addBlock(-0.55, 2.35, 0.64, 0.38, 0.56, 0x7dd3fc, 0.34, { x: 0.04 });
+
+    createSimpleScaffold(-1.9, -4.35, 1.25, 2.4);
+    createSimpleScaffold(3.9, 0.0, 1.1, 2.0);
+  }
+
+  function createSimpleScaffold(x, z, width, height) {
+    const wood = new THREE.MeshStandardMaterial({ color: 0xd49b4d, roughness: 0.78 });
+    const beamMaterial = new THREE.MeshStandardMaterial({ color: 0xffdf7c, roughness: 0.72 });
+
+    [-1, 1].forEach((sideX) => {
+      [-1, 1].forEach((sideZ) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, height, 0.08), wood);
+        post.position.set(x + sideX * width * 0.5, height * 0.5 + 0.08, z + sideZ * 0.42);
+        post.castShadow = true;
+        scene.add(post);
+      });
+    });
+
+    [0.7, 1.35, height].forEach((y) => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(width + 0.22, 0.08, 0.08), beamMaterial);
+      rail.position.set(x, y, z - 0.42);
+      rail.castShadow = true;
+      scene.add(rail);
+
+      const backRail = rail.clone();
+      backRail.position.z = z + 0.42;
+      scene.add(backRail);
+    });
+
+    const platform = new THREE.Mesh(new THREE.BoxGeometry(width + 0.12, 0.08, 0.92), beamMaterial);
+    platform.position.set(x, Math.max(0.72, height - 0.5), z);
+    platform.castShadow = true;
+    platform.receiveShadow = true;
+    scene.add(platform);
+  }
+
+  function createOddPassage() {
+    const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xf8e8ad, roughness: 0.85 });
+    const pathTiles = [
+      [1.28, 2.45, 0.7, 0.06, 0.85, 0.08],
+      [1.62, 1.68, 0.65, 0.06, 0.76, -0.12],
+      [1.92, 0.98, 0.55, 0.06, 0.66, 0.14],
+    ];
+
+    pathTiles.forEach(([x, z, width, height, depth, rotation]) => {
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), pathMaterial);
+      tile.position.set(x, 0.12, z);
+      tile.rotation.y = rotation;
+      tile.receiveShadow = true;
+      scene.add(tile);
+    });
+
+    addBlock(0.55, 2.12, 0.56, 0.9, 0.62, 0xffa9b4, -0.15);
+    addBlock(0.68, 2.92, 0.48, 0.68, 0.54, 0x9d8cff, 0.24);
+    addBlock(2.75, 2.1, 0.5, 0.78, 0.58, 0xffcf4a, 0.18);
+    addBlock(2.62, 2.85, 0.62, 0.54, 0.46, 0x80e0a5, -0.22);
+    addBlock(2.18, 0.42, 0.95, 0.45, 0.36, 0x4d96ff, 0.08);
+  }
+
+  function createBlockYard() {
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(1.8, 0.08, 1.25),
+      new THREE.MeshStandardMaterial({ color: 0xf2cf78, roughness: 0.9 })
+    );
+    base.position.set(-3.25, 0.12, -0.35);
+    base.rotation.y = -0.08;
+    base.receiveShadow = true;
+    scene.add(base);
+
+    const pile = [
+      [-3.85, -0.75, 0.5, 0.38, 0.55, 0xff6b6b, 0.18],
+      [-3.2, -0.82, 0.58, 0.32, 0.45, 0x4d96ff, -0.2],
+      [-2.75, -0.38, 0.46, 0.42, 0.52, 0xffcc4d, 0.38],
+      [-3.55, 0.08, 0.52, 0.28, 0.44, 0x6bcb77, -0.34],
+      [-2.95, 0.12, 0.6, 0.36, 0.5, 0xf58bc3, 0.12],
+    ];
+
+    pile.forEach(([x, z, width, height, depth, color, rotation], index) => {
+      addBlock(x, z, width, height, depth, color, rotation, { z: index % 2 === 0 ? 0.04 : -0.04 });
+    });
+  }
+
+  function createSimpleCrane() {
+    const craneMaterial = new THREE.MeshStandardMaterial({ color: 0xffc247, roughness: 0.62 });
+    const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x6c5b3e, roughness: 0.75 });
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, 0.22, 18), darkMaterial);
+    base.position.set(1.95, 0.24, -2.02);
+    base.castShadow = true;
+    scene.add(base);
+
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(0.16, 2.2, 0.16), craneMaterial);
+    mast.position.set(1.95, 1.36, -2.02);
+    mast.castShadow = true;
+    scene.add(mast);
+
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.13, 0.13), craneMaterial);
+    arm.position.set(1.06, 2.42, -2.02);
+    arm.rotation.z = 0.04;
+    arm.castShadow = true;
+    scene.add(arm);
+
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.28, 0.28), darkMaterial);
+    counter.position.set(2.35, 2.38, -2.02);
+    counter.castShadow = true;
+    scene.add(counter);
+
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.72, 8), darkMaterial);
+    cable.position.set(0.25, 2.04, -2.02);
+    cable.castShadow = true;
+    scene.add(cable);
+
+    const hook = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.22, 10), darkMaterial);
+    hook.position.set(0.25, 1.58, -2.02);
+    hook.rotation.x = Math.PI;
+    hook.castShadow = true;
+    scene.add(hook);
+  }
+
+  function createRestShelter() {
+    const group = new THREE.Group();
+    group.position.set(-5.15, 0.08, 0.25);
+    group.rotation.y = 0.18;
+
+    const baseMaterial = new THREE.MeshStandardMaterial({ color: 0xc9f0ff, roughness: 0.82 });
+    const roofMaterial = new THREE.MeshStandardMaterial({ color: 0xffcf71, roughness: 0.72 });
+    const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x9c6a38, roughness: 0.86 });
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.78, 0.75), baseMaterial);
+    body.position.y = 0.39;
+    body.castShadow = true;
+    body.receiveShadow = true;
+    group.add(body);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.76, 0.38, 4), roofMaterial);
+    roof.position.y = 0.98;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.12, 0.22), woodMaterial);
+    bench.position.set(0.03, 0.2, 0.55);
+    bench.castShadow = true;
+    group.add(bench);
+
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.12, 12), roofMaterial);
+    cup.position.set(0.38, 0.33, 0.56);
+    cup.castShadow = true;
+    group.add(cup);
+
+    scene.add(group);
+  }
+
+  function createResidentGathering() {
+    const tableMaterial = new THREE.MeshStandardMaterial({ color: 0xffefb1, roughness: 0.8 });
+    const table = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.16, 20), tableMaterial);
+    table.position.set(3.0, 0.22, 1.55);
+    table.castShadow = true;
+    table.receiveShadow = true;
+    scene.add(table);
+
+    const seatMaterial = new THREE.MeshStandardMaterial({ color: 0x8fd3ff, roughness: 0.78 });
+    [
+      [2.45, 1.55],
+      [3.55, 1.55],
+      [3.0, 1.05],
+      [3.02, 2.05],
+    ].forEach(([x, z]) => {
+      const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.12, 14), seatMaterial);
+      seat.position.set(x, 0.18, z);
+      seat.castShadow = true;
+      scene.add(seat);
+    });
+
+    createResident(2.52, 0.1, 1.88, 0xff7f7f);
+    createResident(3.42, 0.1, 1.2, 0x7bdb83);
+    createResident(3.35, 0.1, 1.95, 0xb995ff);
   }
 
   function createHomes() {
@@ -277,15 +549,16 @@
 
   function createTower() {
     const group = new THREE.Group();
-    group.position.set(-0.9, 0.08, -5.0);
+    group.position.set(-1.45, 0.08, -4.75);
+    group.rotation.z = -0.035;
 
     const colors = [0x8fd3ff, 0xffcf4a, 0xff7f7f, 0x80e0a5];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       const section = new THREE.Mesh(
-        new THREE.BoxGeometry(0.95 - i * 0.06, 0.7, 0.95 - i * 0.06),
+        new THREE.BoxGeometry(1.05 - i * 0.06, 0.78, 1.05 - i * 0.06),
         new THREE.MeshStandardMaterial({ color: colors[i % colors.length], roughness: 0.72 })
       );
-      section.position.y = 0.35 + i * 0.68;
+      section.position.y = 0.39 + i * 0.75;
       section.rotation.y = i * 0.18;
       section.castShadow = true;
       section.receiveShadow = true;
@@ -296,7 +569,7 @@
       new THREE.ConeGeometry(0.72, 0.92, 5),
       new THREE.MeshStandardMaterial({ color: 0xff8f5a, roughness: 0.72 })
     );
-    roof.position.y = 3.9;
+    roof.position.y = 5.05;
     roof.castShadow = true;
     group.add(roof);
 
@@ -305,22 +578,22 @@
 
   function createRocket() {
     const group = new THREE.Group();
-    group.position.set(5.0, 0.12, 0.4);
-    group.rotation.z = -0.08;
+    group.position.set(4.75, 0.12, -0.25);
+    group.rotation.z = -0.055;
 
     const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.35, 0.42, 2.25, 24),
+      new THREE.CylinderGeometry(0.46, 0.54, 3.25, 24),
       new THREE.MeshStandardMaterial({ color: 0xf7f7f7, roughness: 0.48 })
     );
-    body.position.y = 1.25;
+    body.position.y = 1.78;
     body.castShadow = true;
     group.add(body);
 
     const nose = new THREE.Mesh(
-      new THREE.ConeGeometry(0.36, 0.72, 24),
+      new THREE.ConeGeometry(0.48, 0.9, 24),
       new THREE.MeshStandardMaterial({ color: 0xff5f6d, roughness: 0.58 })
     );
-    nose.position.y = 2.74;
+    nose.position.y = 3.86;
     nose.castShadow = true;
     group.add(nose);
 
@@ -328,13 +601,13 @@
       new THREE.SphereGeometry(0.17, 18, 12),
       new THREE.MeshStandardMaterial({ color: 0x4d96ff, roughness: 0.25 })
     );
-    windowMesh.position.set(0, 1.66, 0.36);
+    windowMesh.position.set(0, 2.22, 0.47);
     group.add(windowMesh);
 
     const finMaterial = new THREE.MeshStandardMaterial({ color: 0xffcf4a, roughness: 0.72 });
     [-1, 1].forEach((side) => {
-      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.46), finMaterial);
-      fin.position.set(side * 0.38, 0.35, 0);
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82, 0.58), finMaterial);
+      fin.position.set(side * 0.52, 0.48, 0);
       fin.rotation.z = side * 0.25;
       fin.castShadow = true;
       group.add(fin);
@@ -375,6 +648,7 @@
     antenna.position.y = 1.42;
     group.add(antenna);
 
+    group.scale.setScalar(0.84);
     animatedParts.push({ object: group, baseY: y, speed: 1.8 + animatedParts.length * 0.18, amount: 0.035 });
     scene.add(group);
   }
@@ -407,6 +681,7 @@
     hat.castShadow = true;
     group.add(hat);
 
+    group.scale.setScalar(0.78);
     scene.add(group);
   }
 
@@ -424,11 +699,32 @@
 
     if (isOutside) {
       applyOutsideCamera();
-      setTimedMessage(options.showInitialMessage ? initialMessage : outsideMessage, outsideMessage);
+      if (options.showInitialMessage) {
+        setOpeningMessages();
+      } else {
+        setTimedMessage(outsideMessage);
+      }
     } else {
       applyHeroCamera();
       setTimedMessage(heroMessage);
     }
+  }
+
+  function setOpeningMessages() {
+    window.clearTimeout(initialMessageTimer);
+    messageText.textContent = initialMessage;
+
+    initialMessageTimer = window.setTimeout(() => {
+      if (currentMode === MODES.OUTSIDE) {
+        messageText.textContent = centralMessage;
+      }
+
+      initialMessageTimer = window.setTimeout(() => {
+        if (currentMode === MODES.OUTSIDE) {
+          messageText.textContent = outsideMessage;
+        }
+      }, 2600);
+    }, 2200);
   }
 
   function setTimedMessage(message, nextMessage) {
@@ -452,6 +748,7 @@
     }
 
     heroOffset = 0;
+    heroLookSway = 0;
     applyHeroCamera();
     messageText.textContent = heroMessage;
   }
@@ -472,7 +769,7 @@
     camera.position.copy(position);
 
     const target = heroLookTarget.clone();
-    target.x += heroOffset * 0.35;
+    target.x += heroOffset * 0.28 + heroLookSway;
     camera.lookAt(target);
   }
 
@@ -488,7 +785,8 @@
 
     event.preventDefault();
     const direction = key === "arrowleft" || key === "a" ? -1 : 1;
-    heroOffset = THREE.MathUtils.clamp(heroOffset + direction * 0.28, -1.35, 1.35);
+    heroOffset = THREE.MathUtils.clamp(heroOffset + direction * 0.25, -1.2, 1.2);
+    heroLookSway = THREE.MathUtils.clamp(heroLookSway + direction * 0.16, -0.32, 0.32);
     applyHeroCamera();
   }
 
@@ -511,6 +809,11 @@
     animatedParts.forEach(({ object, baseY, speed, amount }, index) => {
       object.position.y = baseY + Math.sin(elapsed * speed + index) * amount;
     });
+
+    if (currentMode === MODES.HERO && Math.abs(heroLookSway) > 0.001) {
+      heroLookSway *= 0.92;
+      applyHeroCamera();
+    }
 
     if (controls && controls.enabled) {
       controls.update();

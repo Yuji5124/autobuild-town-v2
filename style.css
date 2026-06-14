@@ -229,13 +229,14 @@ button {
   top: 18px;
   left: 18px;
   max-width: calc(100vw - 36px);
-  padding: 10px 16px;
-  border: 2px solid rgba(36, 50, 71, 0.18);
+  padding: 11px 17px;
+  border: 2px solid rgba(36, 50, 71, 0.26);
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 8px 18px var(--shadow);
   font-size: clamp(0.9rem, 2.8vw, 1rem);
   font-weight: 800;
+  letter-spacing: 0;
 }
 
 .camera-panel {
@@ -246,6 +247,11 @@ button {
   align-items: center;
   justify-content: flex-end;
   max-width: calc(100vw - 36px);
+  padding: 8px;
+  border: 2px solid rgba(36, 50, 71, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 248, 221, 0.52);
+  box-shadow: 0 10px 24px rgba(36, 50, 71, 0.12);
 }
 
 .hud-button {
@@ -270,6 +276,7 @@ button {
 .hud-button.is-active {
   border-color: #9d680d;
   background: var(--button);
+  box-shadow: 0 0 0 3px rgba(255, 207, 74, 0.35), 0 6px 14px var(--shadow);
 }
 
 .message-window {
