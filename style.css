@@ -239,7 +239,8 @@ button {
   letter-spacing: 0;
 }
 
-.camera-panel {
+.camera-panel,
+.rain-panel {
   top: 18px;
   right: 18px;
   display: flex;
@@ -252,6 +253,11 @@ button {
   border-radius: 8px;
   background: rgba(255, 248, 221, 0.52);
   box-shadow: 0 10px 24px rgba(36, 50, 71, 0.12);
+}
+
+.rain-panel {
+  top: 82px;
+  background: rgba(217, 246, 255, 0.58);
 }
 
 .hud-button {
@@ -277,6 +283,20 @@ button {
   border-color: #9d680d;
   background: var(--button);
   box-shadow: 0 0 0 3px rgba(255, 207, 74, 0.35), 0 6px 14px var(--shadow);
+}
+
+.block-counter {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 2px solid rgba(36, 50, 71, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 6px 14px var(--shadow);
+  font-size: 0.95rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .message-window {
@@ -310,13 +330,21 @@ button {
     transform: scale(0.88);
   }
 
-  .camera-panel {
+  .camera-panel,
+  .rain-panel {
     top: auto;
     right: 12px;
-    bottom: 96px;
     left: 12px;
     justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .camera-panel {
+    bottom: 146px;
+  }
+
+  .rain-panel {
+    bottom: 88px;
   }
 
   .mode-badge {
@@ -327,6 +355,12 @@ button {
   .hud-button {
     flex: 1 1 130px;
     padding-inline: 10px;
+    font-size: 0.88rem;
+  }
+
+  .block-counter {
+    flex: 1 1 130px;
+    justify-content: center;
     font-size: 0.88rem;
   }
 }

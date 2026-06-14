@@ -6,6 +6,9 @@
   const outsideButton = document.getElementById("outside-button");
   const heroButton = document.getElementById("hero-button");
   const resetButton = document.getElementById("reset-button");
+  const rainToggleButton = document.getElementById("rain-toggle-button");
+  const burstButton = document.getElementById("burst-button");
+  const blockCount = document.getElementById("block-count");
   const modeLabel = document.getElementById("mode-label");
   const messageText = document.getElementById("message-text");
 
@@ -15,14 +18,27 @@
   };
 
   const outsideMessage = "外から見ると、町はまだ未完成の構造物に見える。";
-  const heroMessage = "中に入ると、同じ町が少し違って見える。";
-  const initialMessage = "名前のない町が、まだ何かを作りたがっている。";
+  const heroMessage = "中にいると、落ちてくるブロックが少し大きく見える。";
+  const initialMessage = "名前のない町の上に、今日の材料が降ってくる。";
   const centralMessage = "ここに、まだ名前のない何かが作られようとしている。";
+  const rainOnMessage = "空からブロックが落ちてくる。町はそれを材料にしようとしている。";
+  const rainOffMessage = "ブロックの雨が止まった。町は少し静かになった。";
 
   const outsideCameraPosition = new THREE.Vector3(8.8, 5.9, 9.4);
   const outsideTarget = new THREE.Vector3(0.2, 1.05, -0.15);
   const heroStartPosition = new THREE.Vector3(0.9, 1.05, 2.7);
   const heroLookTarget = new THREE.Vector3(3.45, 3.2, -0.55);
+  const fallingBlockLimit = 100;
+  const fallingPalette = [
+    0xff6b6b, 0xffcc4d, 0x4d96ff, 0x6bcb77, 0xff8f5a,
+    0x9d8cff, 0x4dd6c7, 0xf2ef6d, 0xf58bc3, 0x7dd3fc,
+  ];
+  const dropZones = [
+    { name: "foundation", x: 0.05, z: -0.2, radiusX: 2.0, radiusZ: 1.45, weight: 5, landings: 0 },
+    { name: "block-yard", x: -3.25, z: -0.35, radiusX: 1.2, radiusZ: 0.85, weight: 3, landings: 0 },
+    { name: "rocket-side", x: 3.85, z: -1.2, radiusX: 1.1, radiusZ: 0.95, weight: 2, landings: 0 },
+    { name: "outer-town", x: -1.2, z: 3.9, radiusX: 2.3, radiusZ: 0.85, weight: 2, landings: 0 },
+  ];
 
   let scene;
   let camera;
@@ -31,10 +47,14 @@
   let currentMode = MODES.OUTSIDE;
   let heroOffset = 0;
   let heroLookSway = 0;
+  let rainEnabled = true;
+  let nextBlockDropAt = 0;
   let animationStarted = false;
   let initialMessageTimer = null;
   const clock = new THREE.Clock();
   const animatedParts = [];
+  const fallingBlocks = [];
+  const landingEffects = [];
 
   startButton.addEventListener("click", () => {
     titleScreen.classList.add("is-hidden");
@@ -51,6 +71,11 @@
   outsideButton.addEventListener("click", () => setMode(MODES.OUTSIDE));
   heroButton.addEventListener("click", () => setMode(MODES.HERO));
   resetButton.addEventListener("click", resetCameraForCurrentMode);
+  rainToggleButton.addEventListener("click", toggleBlockRain);
+  burstButton.addEventListener("click", () => {
+    spawnBlockBurst(7);
+    setTimedMessage(rainOnMessage);
+  });
   window.addEventListener("resize", resizeRenderer);
   window.addEventListener("keydown", handleHeroKeys);
 
@@ -81,6 +106,10 @@
     addLights();
     createDioramaBase();
     createTownObjects();
+    updateRainButton();
+    updateBlockCount();
+    spawnBlockBurst(4);
+    nextBlockDropAt = clock.elapsedTime + 0.8;
 
     if (!animationStarted) {
       animationStarted = true;
@@ -685,6 +714,214 @@
     scene.add(group);
   }
 
+  function toggleBlockRain() {
+    rainEnabled = !rainEnabled;
+    updateRainButton();
+    setTimedMessage(rainEnabled ? rainOnMessage : rainOffMessage);
+
+    if (rainEnabled) {
+      nextBlockDropAt = clock.elapsedTime + 0.35;
+    }
+  }
+
+  function updateRainButton() {
+    rainToggleButton.textContent = rainEnabled ? "ブロックの雨 ON" : "ブロックの雨 OFF";
+    rainToggleButton.classList.toggle("is-active", rainEnabled);
+  }
+
+  function updateBlockCount() {
+    blockCount.textContent = String(fallingBlocks.length);
+  }
+
+  function spawnBlockBurst(amount) {
+    for (let i = 0; i < amount; i += 1) {
+      spawnFallingBlock(i * 0.16);
+    }
+  }
+
+  function spawnFallingBlock(stagger = 0) {
+    pruneFallingBlocks();
+
+    const zone = chooseDropZone();
+    const landing = chooseLandingPoint(zone);
+    const size = {
+      x: randomBetween(0.38, 0.78),
+      y: randomBetween(0.3, 0.72),
+      z: randomBetween(0.38, 0.82),
+    };
+    const color = fallingPalette[Math.floor(Math.random() * fallingPalette.length)];
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.02 });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
+    const startY = randomBetween(7.2, 10.4) + stagger * 2.2;
+    const fallLeanX = randomBetween(-0.42, 0.42);
+    const fallLeanZ = randomBetween(-0.42, 0.42);
+    const pileLift = Math.min(0.56, zone.landings * 0.014) + randomBetween(0, 0.1);
+
+    mesh.position.set(landing.x + fallLeanX, startY, landing.z + fallLeanZ);
+    mesh.rotation.set(
+      randomBetween(-0.42, 0.42),
+      randomBetween(0, Math.PI),
+      randomBetween(-0.42, 0.42)
+    );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+
+    fallingBlocks.push({
+      mesh,
+      zone,
+      state: "falling",
+      targetX: landing.x,
+      targetZ: landing.z,
+      targetY: 0.1 + size.y / 2 + pileLift,
+      fallSpeed: randomBetween(2.25, 3.65),
+      driftX: (landing.x - mesh.position.x) * randomBetween(0.18, 0.32),
+      driftZ: (landing.z - mesh.position.z) * randomBetween(0.18, 0.32),
+      rotationSpeed: new THREE.Vector3(
+        randomBetween(-1.8, 1.8),
+        randomBetween(-2.2, 2.2),
+        randomBetween(-1.5, 1.5)
+      ),
+      bounceTime: 0,
+      bounceDuration: randomBetween(0.28, 0.42),
+      finalRotationY: randomBetween(-0.5, 0.5),
+    });
+
+    updateBlockCount();
+  }
+
+  function chooseDropZone() {
+    const totalWeight = dropZones.reduce((sum, zone) => sum + zone.weight, 0);
+    let pick = Math.random() * totalWeight;
+
+    for (const zone of dropZones) {
+      pick -= zone.weight;
+      if (pick <= 0) {
+        return zone;
+      }
+    }
+
+    return dropZones[0];
+  }
+
+  function chooseLandingPoint(zone) {
+    let x = zone.x + randomBetween(-zone.radiusX, zone.radiusX);
+    let z = zone.z + randomBetween(-zone.radiusZ, zone.radiusZ);
+    const distanceFromHero = Math.hypot(x - heroStartPosition.x, z - heroStartPosition.z);
+
+    if (distanceFromHero < 1.35) {
+      z -= 1.45;
+      x += x < heroStartPosition.x ? -0.45 : 0.45;
+    }
+
+    return {
+      x: THREE.MathUtils.clamp(x, -6.5, 6.5),
+      z: THREE.MathUtils.clamp(z, -6.5, 6.5),
+    };
+  }
+
+  function updateFallingBlockRain(elapsed, delta) {
+    if (rainEnabled && elapsed >= nextBlockDropAt) {
+      spawnFallingBlock();
+      nextBlockDropAt = elapsed + randomBetween(0.95, 1.55);
+    }
+
+    for (const block of fallingBlocks) {
+      if (block.state === "falling") {
+        block.mesh.position.y -= block.fallSpeed * delta;
+        block.mesh.position.x += block.driftX * delta;
+        block.mesh.position.z += block.driftZ * delta;
+        block.mesh.rotation.x += block.rotationSpeed.x * delta;
+        block.mesh.rotation.y += block.rotationSpeed.y * delta;
+        block.mesh.rotation.z += block.rotationSpeed.z * delta;
+
+        if (block.mesh.position.y <= block.targetY) {
+          block.mesh.position.set(block.targetX, block.targetY, block.targetZ);
+          block.mesh.rotation.x *= 0.45;
+          block.mesh.rotation.y = block.finalRotationY;
+          block.mesh.rotation.z *= 0.45;
+          block.state = "bouncing";
+          block.zone.landings += 1;
+          createLandingEffect(block.mesh.position, block.mesh.material.color);
+        }
+      } else if (block.state === "bouncing") {
+        block.bounceTime += delta;
+        const progress = THREE.MathUtils.clamp(block.bounceTime / block.bounceDuration, 0, 1);
+        const hop = Math.sin(progress * Math.PI) * 0.16 * (1 - progress);
+        block.mesh.position.y = block.targetY + hop;
+        block.mesh.rotation.y += 0.4 * delta * (1 - progress);
+
+        if (progress >= 1) {
+          block.mesh.position.y = block.targetY;
+          block.state = "settled";
+        }
+      }
+    }
+
+    updateLandingEffects(delta);
+  }
+
+  function createLandingEffect(position, color) {
+    const effectMaterial = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.34,
+      depthWrite: false,
+    });
+    const effect = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.018, 28), effectMaterial);
+    effect.position.set(position.x, 0.11, position.z);
+    effect.scale.set(0.38, 1, 0.38);
+    scene.add(effect);
+    landingEffects.push({ mesh: effect, age: 0, duration: 0.52 });
+  }
+
+  function updateLandingEffects(delta) {
+    for (let i = landingEffects.length - 1; i >= 0; i -= 1) {
+      const effect = landingEffects[i];
+      effect.age += delta;
+      const progress = THREE.MathUtils.clamp(effect.age / effect.duration, 0, 1);
+      const scale = 0.38 + progress * 1.35;
+      effect.mesh.scale.set(scale, 1, scale);
+      effect.mesh.material.opacity = 0.34 * (1 - progress);
+
+      if (progress >= 1) {
+        scene.remove(effect.mesh);
+        disposeObject(effect.mesh);
+        landingEffects.splice(i, 1);
+      }
+    }
+  }
+
+  function pruneFallingBlocks() {
+    while (fallingBlocks.length >= fallingBlockLimit) {
+      const settledIndex = fallingBlocks.findIndex((block) => block.state === "settled");
+      const removeIndex = settledIndex >= 0 ? settledIndex : 0;
+      const [removed] = fallingBlocks.splice(removeIndex, 1);
+      scene.remove(removed.mesh);
+      disposeObject(removed.mesh);
+    }
+  }
+
+  function disposeObject(object) {
+    object.traverse((child) => {
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((material) => material.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
+  }
+
+  function randomBetween(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
   function setMode(mode, options = {}) {
     currentMode = mode;
     const isOutside = mode === MODES.OUTSIDE;
@@ -716,12 +953,12 @@
 
     initialMessageTimer = window.setTimeout(() => {
       if (currentMode === MODES.OUTSIDE) {
-        messageText.textContent = centralMessage;
+        messageText.textContent = rainOnMessage;
       }
 
       initialMessageTimer = window.setTimeout(() => {
         if (currentMode === MODES.OUTSIDE) {
-          messageText.textContent = outsideMessage;
+          messageText.textContent = centralMessage;
         }
       }, 2600);
     }, 2200);
@@ -804,11 +1041,14 @@
 
   function animate() {
     requestAnimationFrame(animate);
-    const elapsed = clock.getElapsedTime();
+    const delta = Math.min(clock.getDelta(), 0.05);
+    const elapsed = clock.elapsedTime;
 
     animatedParts.forEach(({ object, baseY, speed, amount }, index) => {
       object.position.y = baseY + Math.sin(elapsed * speed + index) * amount;
     });
+
+    updateFallingBlockRain(elapsed, delta);
 
     if (currentMode === MODES.HERO && Math.abs(heroLookSway) > 0.001) {
       heroLookSway *= 0.92;

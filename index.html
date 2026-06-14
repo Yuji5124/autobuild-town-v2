@@ -38,8 +38,14 @@
         <button id="reset-button" type="button" class="hud-button">カメラをリセット</button>
       </div>
 
+      <div class="hud rain-panel" aria-label="ブロックの雨操作">
+        <button id="rain-toggle-button" type="button" class="hud-button is-active">ブロックの雨 ON</button>
+        <button id="burst-button" type="button" class="hud-button">少しだけ降らす</button>
+        <span class="block-counter" aria-live="polite">ブロック数: <span id="block-count">0</span></span>
+      </div>
+
       <div class="hud message-window" aria-live="polite">
-        <p id="message-text">ここに、まだ名前のない何かが作られようとしている。</p>
+        <p id="message-text">名前のない町の上に、今日の材料が降ってくる。</p>
       </div>
     </section>
   </main>
