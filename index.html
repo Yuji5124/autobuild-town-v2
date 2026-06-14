@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>オートビルドタウン v2 | つくりたがりの町</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js" defer></script>
+  <script src="./main.js" defer></script>
+</head>
+<body>
+  <main id="app">
+    <section id="title-screen" class="title-screen" aria-labelledby="game-title">
+      <div class="title-town" aria-hidden="true">
+        <span class="mini-block block-a"></span>
+        <span class="mini-block block-b"></span>
+        <span class="mini-block block-c"></span>
+        <span class="mini-block block-d"></span>
+        <span class="mini-roof"></span>
+      </div>
+      <p class="subtitle">つくりたがりの町</p>
+      <h1 id="game-title">オートビルドタウン v2</h1>
+      <p class="tagline">自分で作っていない町なのに、だんだん自分の町に見えてくる。</p>
+      <button id="start-button" class="start-button" type="button">はじめる</button>
+    </section>
+
+    <section id="game-screen" class="game-screen is-hidden" aria-label="3Dゲーム画面">
+      <div id="scene-container" class="scene-container"></div>
+
+      <div class="hud mode-badge" aria-live="polite">
+        <span id="mode-label">外側から見るモード</span>
+      </div>
+
+      <div class="hud camera-panel" aria-label="カメラ操作">
+        <button id="outside-button" type="button" class="hud-button is-active">外側から見る</button>
+        <button id="hero-button" type="button" class="hud-button">主人公目線</button>
+        <button id="reset-button" type="button" class="hud-button">カメラをリセット</button>
+      </div>
+
+      <div class="hud message-window" aria-live="polite">
+        <p id="message-text">名前のない町が、まだ何かを作りたがっている。</p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
