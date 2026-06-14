@@ -361,8 +361,37 @@ button {
 }
 
 .hero-controls.is-hidden,
-.hero-touch.is-hidden {
+.hero-touch.is-hidden,
+.hero-observe.is-hidden {
   display: none;
+}
+
+.hero-observe {
+  top: 116px;
+  left: 18px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  max-width: calc(100vw - 36px);
+  padding: 8px;
+  border: 2px solid rgba(36, 50, 71, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 248, 221, 0.78);
+  box-shadow: 0 10px 24px rgba(36, 50, 71, 0.12);
+}
+
+.nearby-spot {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 2px solid rgba(36, 50, 71, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 6px 14px var(--shadow);
+  font-size: 0.95rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .hero-touch {

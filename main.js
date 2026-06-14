@@ -24,6 +24,9 @@
     left: document.getElementById("hero-touch-left"),
     right: document.getElementById("hero-touch-right"),
   };
+  const heroObservePanel = document.getElementById("hero-observe");
+  const nearbySpotLabel = document.getElementById("nearby-spot");
+  const lookButton = document.getElementById("look-button");
 
   const MODES = {
     OUTSIDE: "outside",
@@ -85,6 +88,57 @@
     [-0.62, 0.44],
     [0.62, 0.44],
   ];
+  const noSpotLookMessage = "ここには、まだ気になる場所はなさそうだ。";
+  const observationSpots = [
+    {
+      id: "frame",
+      name: "未完成の骨組み",
+      position: { x: 0.1, z: -0.1 },
+      radius: 1.5,
+      shortMessage: "ここは、まだ何かになる前の場所だ。",
+      lookMessage: "まだ完成していない。でも、ここが町の中心になりそうだ。",
+    },
+    {
+      id: "yard",
+      name: "材料置き場",
+      position: { x: -2.8, z: 0.5 },
+      radius: 1.5,
+      shortMessage: "材料が、ここに集まっている。",
+      lookMessage: "落ちてきたものが、ただのゴミではなく材料に見えてくる。",
+    },
+    {
+      id: "gap",
+      name: "変な隙間の通路",
+      position: { x: 1.95, z: 1.55 },
+      radius: 1.25,
+      shortMessage: "この隙間から、空が見える。",
+      lookMessage: "外から見ると無駄なすきま。でも、ここから空が見える。",
+    },
+    {
+      id: "rocket",
+      name: "ロケットの足場",
+      position: { x: 4.4, z: -0.25 },
+      radius: 1.6,
+      shortMessage: "ロケットの足元は、思ったより大きい。",
+      lookMessage: "飛ぶためなのか、住むためなのか、まだ分からない。",
+    },
+    {
+      id: "shelter",
+      name: "作業員の休憩所",
+      position: { x: -5.0, z: 0.25 },
+      radius: 1.4,
+      shortMessage: "作業員たちが、ここを何度も通っている。",
+      lookMessage: "作業員たちが、少しだけ止まる場所。",
+    },
+    {
+      id: "tower",
+      name: "見上げる塔の根元",
+      position: { x: -1.45, z: -3.95 },
+      radius: 1.5,
+      shortMessage: "見上げると、塔がずっと高く感じる。",
+      lookMessage: "見上げると、外から見た時よりずっと高い。",
+    },
+  ];
   const workerPlaceLines = [
     "ここに おこう",
     "あつまってきた",
@@ -120,6 +174,7 @@
   let heroDragging = false;
   let heroDragLastX = 0;
   const heroKeys = { forward: false, back: false, left: false, right: false };
+  let currentSpot = null;
   let rainEnabled = true;
   let workersEnabled = true;
   let nextBlockDropAt = 0;
@@ -163,6 +218,7 @@
   window.addEventListener("keyup", handleHeroKeyUp);
   window.addEventListener("pointermove", handleHeroPointerMove);
   window.addEventListener("pointerup", handleHeroPointerUp);
+  lookButton.addEventListener("click", handleLookButton);
   bindHeroTouchButtons();
 
   function initScene() {
@@ -658,6 +714,36 @@
     createResident(2.1, 0.1, -1.15, 0x7bdb83);
     createResident(-3.4, 0.1, 1.1, 0xb995ff);
     createResident(4.6, 0.1, -3.2, 0xffb35c);
+    createObservationSpots();
+  }
+
+  function createObservationSpots() {
+    // 観察スポットの目印。収集アイテムに見えないよう、薄い光のリングと小さな石だけにする。
+    observationSpots.forEach((spot) => {
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.42, 0.52, 28),
+        new THREE.MeshBasicMaterial({
+          color: 0xfff0c4,
+          transparent: true,
+          opacity: 0.2,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        })
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(spot.position.x, 0.1, spot.position.z);
+      scene.add(ring);
+
+      const stone = new THREE.Mesh(
+        new THREE.SphereGeometry(0.11, 12, 10),
+        new THREE.MeshStandardMaterial({ color: 0xa7adb5, roughness: 0.92 })
+      );
+      stone.scale.set(1, 0.6, 1);
+      stone.position.set(spot.position.x, 0.13, spot.position.z);
+      stone.castShadow = true;
+      stone.receiveShadow = true;
+      scene.add(stone);
+    });
   }
 
   function createColorBlocks() {
@@ -1752,6 +1838,7 @@
 
     heroControls.classList.toggle("is-hidden", isOutside);
     heroTouchPanel.classList.toggle("is-hidden", isOutside);
+    heroObservePanel.classList.toggle("is-hidden", isOutside);
 
     if (isOutside) {
       clearHeroKeys();
@@ -1763,6 +1850,8 @@
       }
     } else {
       resetHeroPose();
+      currentSpot = null;
+      updateNearbyLabel();
       setTimedMessage(heroEnterMessage, heroMaterialMessage);
     }
   }
@@ -1872,6 +1961,49 @@
 
     if (changed) {
       applyHeroCamera();
+    }
+
+    updateObservationProximity();
+  }
+
+  function updateObservationProximity() {
+    let nearest = null;
+    let nearestDistance = Infinity;
+
+    observationSpots.forEach((spot) => {
+      const distance = Math.hypot(heroPos.x - spot.position.x, heroPos.z - spot.position.z);
+      if (distance <= spot.radius && distance < nearestDistance) {
+        nearest = spot;
+        nearestDistance = distance;
+      }
+    });
+
+    if (nearest === currentSpot) {
+      return;
+    }
+
+    currentSpot = nearest;
+    updateNearbyLabel();
+
+    // 同じスポットにいる間は出し直さない。新しく入った時だけ一度メッセージを出す。
+    if (currentSpot) {
+      setTimedMessage(currentSpot.shortMessage);
+    }
+  }
+
+  function updateNearbyLabel() {
+    nearbySpotLabel.textContent = currentSpot ? currentSpot.name : "なし";
+  }
+
+  function handleLookButton() {
+    if (currentMode !== MODES.HERO) {
+      return;
+    }
+
+    if (currentSpot) {
+      setTimedMessage(currentSpot.lookMessage);
+    } else {
+      setTimedMessage(noSpotLookMessage);
     }
   }
 
