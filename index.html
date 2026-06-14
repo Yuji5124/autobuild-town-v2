@@ -44,8 +44,15 @@
         <span class="block-counter" aria-live="polite">ブロック数: <span id="block-count">0</span></span>
       </div>
 
+      <div class="hud worker-panel" aria-label="作業員操作">
+        <button id="worker-toggle-button" type="button" class="hud-button is-active">作業員 ON</button>
+        <span class="worker-state" aria-live="polite">作業員: <span id="worker-state-label">さがす</span></span>
+      </div>
+
+      <div id="worker-speech" class="worker-speech" aria-hidden="true"></div>
+
       <div class="hud message-window" aria-live="polite">
-        <p id="message-text">名前のない町の上に、今日の材料が降ってくる。</p>
+        <p id="message-text">落ちてきた材料に、作業員たちが気づきはじめた。</p>
       </div>
     </section>
   </main>

@@ -9,6 +9,9 @@
   const rainToggleButton = document.getElementById("rain-toggle-button");
   const burstButton = document.getElementById("burst-button");
   const blockCount = document.getElementById("block-count");
+  const workerToggleButton = document.getElementById("worker-toggle-button");
+  const workerStateLabel = document.getElementById("worker-state-label");
+  const workerSpeech = document.getElementById("worker-speech");
   const modeLabel = document.getElementById("mode-label");
   const messageText = document.getElementById("message-text");
 
@@ -18,17 +21,21 @@
   };
 
   const outsideMessage = "外から見ると、町はまだ未完成の構造物に見える。";
-  const heroMessage = "中にいると、落ちてくるブロックが少し大きく見える。";
-  const initialMessage = "名前のない町の上に、今日の材料が降ってくる。";
+  const heroMessage = "中から見ると、作業員が材料を気にしているのが分かる。";
+  const initialMessage = "落ちてきた材料に、作業員たちが気づきはじめた。";
   const centralMessage = "ここに、まだ名前のない何かが作られようとしている。";
   const rainOnMessage = "空からブロックが落ちてくる。町はそれを材料にしようとしている。";
   const rainOffMessage = "ブロックの雨が止まった。町は少し静かになった。";
+  const workerOnMessage = "作業員たちは、使えそうなブロックを探している。";
+  const workerOffMessage = "作業員たちは少し休んでいる。";
+  const inspectingMessage = "これ、つかえそう。";
+  const carryingMessage = "町はまだ、何になるのか考えている。";
 
   const outsideCameraPosition = new THREE.Vector3(8.8, 5.9, 9.4);
   const outsideTarget = new THREE.Vector3(0.2, 1.05, -0.15);
   const heroStartPosition = new THREE.Vector3(0.9, 1.05, 2.7);
   const heroLookTarget = new THREE.Vector3(3.45, 3.2, -0.55);
-  const fallingBlockLimit = 100;
+  const fallingBlockLimit = 80;
   const fallingPalette = [
     0xff6b6b, 0xffcc4d, 0x4d96ff, 0x6bcb77, 0xff8f5a,
     0x9d8cff, 0x4dd6c7, 0xf2ef6d, 0xf58bc3, 0x7dd3fc,
@@ -39,6 +46,26 @@
     { name: "rocket-side", x: 3.85, z: -1.2, radiusX: 1.1, radiusZ: 0.95, weight: 2, landings: 0 },
     { name: "outer-town", x: -1.2, z: 3.9, radiusX: 2.3, radiusZ: 0.85, weight: 2, landings: 0 },
   ];
+  const workerDropOffTargets = [
+    { x: -1.45, z: -0.95, radius: 0.55 },
+    { x: 1.35, z: -0.9, radius: 0.5 },
+    { x: -3.25, z: -0.35, radius: 0.85 },
+  ];
+  const workerSpeechLines = [
+    "これ、つかえそう",
+    "ここに はこぼう",
+    "まるいの、たりない",
+    "ちょっと おもい",
+    "まだ なまえがない",
+    "まだ なまえがない",
+    "どこに おこうかな",
+    "この町、まだ つくってる",
+  ];
+  const workerStateLabels = {
+    searching: "さがす",
+    inspecting: "しらべる",
+    carrying: "はこぶ",
+  };
 
   let scene;
   let camera;
@@ -48,13 +75,17 @@
   let heroOffset = 0;
   let heroLookSway = 0;
   let rainEnabled = true;
+  let workersEnabled = true;
   let nextBlockDropAt = 0;
   let animationStarted = false;
   let initialMessageTimer = null;
+  let workerSpeechUntil = 0;
+  let activeSpeechWorker = null;
   const clock = new THREE.Clock();
   const animatedParts = [];
   const fallingBlocks = [];
   const landingEffects = [];
+  const workerAgents = [];
 
   startButton.addEventListener("click", () => {
     titleScreen.classList.add("is-hidden");
@@ -76,6 +107,7 @@
     spawnBlockBurst(7);
     setTimedMessage(rainOnMessage);
   });
+  workerToggleButton.addEventListener("click", toggleWorkers);
   window.addEventListener("resize", resizeRenderer);
   window.addEventListener("keydown", handleHeroKeys);
 
@@ -108,6 +140,8 @@
     createTownObjects();
     updateRainButton();
     updateBlockCount();
+    updateWorkerButton();
+    updateWorkerStatus();
     spawnBlockBurst(4);
     nextBlockDropAt = clock.elapsedTime + 0.8;
 
@@ -273,8 +307,8 @@
     createHomes();
     createTower();
     createRocket();
-    createRobot(-4.2, 0.1, -2.6, 0x4aa3ff);
-    createRobot(2.55, 0.1, 1.65, 0xffcc4d);
+    registerWorker(createRobot(-4.2, 0.1, -2.6, 0x4aa3ff), "worker-blue");
+    registerWorker(createRobot(2.55, 0.1, 1.65, 0xffcc4d), "worker-yellow");
     createRobot(0.85, 0.1, -1.65, 0x6bcb77);
     createResident(-1.2, 0.1, 2.9, 0xff7f7f);
     createResident(2.1, 0.1, -1.15, 0x7bdb83);
@@ -680,6 +714,7 @@
     group.scale.setScalar(0.84);
     animatedParts.push({ object: group, baseY: y, speed: 1.8 + animatedParts.length * 0.18, amount: 0.035 });
     scene.add(group);
+    return group;
   }
 
   function createResident(x, y, z, color) {
@@ -712,6 +747,336 @@
 
     group.scale.setScalar(0.78);
     scene.add(group);
+  }
+
+  function registerWorker(group, id) {
+    const carryMaterial = new THREE.MeshStandardMaterial({ color: 0xffcf4a, roughness: 0.72 });
+    const carryMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.28, 0.34), carryMaterial);
+    carryMesh.position.set(0, 1.12, 0.42);
+    carryMesh.castShadow = true;
+    carryMesh.visible = false;
+    group.add(carryMesh);
+
+    workerAgents.push({
+      id,
+      group,
+      carryMesh,
+      state: "searching",
+      targetBlock: null,
+      targetPoint: null,
+      dropOffPoint: null,
+      inspectTimer: 0,
+      pauseTimer: randomBetween(0.2, 0.8),
+      speechCooldown: randomBetween(1.2, 2.4),
+      wobblePhase: Math.random() * Math.PI * 2,
+      wobbleSpeed: randomBetween(1.1, 1.8),
+      speed: randomBetween(0.75, 1.0),
+    });
+  }
+
+  function toggleWorkers() {
+    workersEnabled = !workersEnabled;
+    updateWorkerButton();
+    updateWorkerStatus();
+    setTimedMessage(workersEnabled ? workerOnMessage : workerOffMessage);
+
+    if (!workersEnabled) {
+      hideWorkerSpeech();
+    }
+  }
+
+  function updateWorkerButton() {
+    workerToggleButton.textContent = workersEnabled ? "作業員 ON" : "作業員 OFF";
+    workerToggleButton.classList.toggle("is-active", workersEnabled);
+  }
+
+  function updateWorkerStatus() {
+    if (!workersEnabled) {
+      workerStateLabel.textContent = "休み";
+      return;
+    }
+
+    if (workerAgents.length === 0) {
+      workerStateLabel.textContent = "待機";
+      return;
+    }
+
+    const counts = workerAgents.reduce((summary, worker) => {
+      summary[worker.state] += 1;
+      return summary;
+    }, { searching: 0, inspecting: 0, carrying: 0 });
+
+    workerStateLabel.textContent = Object.entries(counts)
+      .filter(([, count]) => count > 0)
+      .map(([state, count]) => `${workerStateLabels[state]} ${count}`)
+      .join(" / ");
+  }
+
+  function updateWorkerAgents(elapsed, delta) {
+    if (!workersEnabled) {
+      return;
+    }
+
+    workerAgents.forEach((worker) => {
+      worker.speechCooldown = Math.max(0, worker.speechCooldown - delta);
+
+      if (worker.state === "searching") {
+        updateSearchingWorker(worker, delta);
+      } else if (worker.state === "inspecting") {
+        updateInspectingWorker(worker, delta);
+      } else if (worker.state === "carrying") {
+        updateCarryingWorker(worker, delta);
+      }
+    });
+
+    updateWorkerStatus();
+  }
+
+  function updateSearchingWorker(worker, delta) {
+    if (!worker.targetBlock || worker.targetBlock.state !== "settled" || worker.targetBlock.delivered) {
+      assignWorkerTarget(worker);
+    }
+
+    if (!worker.targetBlock) {
+      worker.group.rotation.y += Math.sin(clock.elapsedTime * 1.6 + worker.wobblePhase) * 0.01;
+      return;
+    }
+
+    if (worker.pauseTimer > 0) {
+      worker.pauseTimer -= delta;
+      worker.group.rotation.y += Math.sin(clock.elapsedTime * 5 + worker.wobblePhase) * 0.012;
+      return;
+    }
+
+    if (Math.random() < 0.006) {
+      worker.pauseTimer = randomBetween(0.18, 0.45);
+      if (worker.speechCooldown <= 0) {
+        showWorkerSpeech(worker, "どこに おこうかな", 1.6);
+      }
+      return;
+    }
+
+    const target = getWorkerApproachPoint(worker);
+    const arrived = moveWorkerToward(worker, target, delta, worker.speed);
+
+    if (arrived) {
+      enterInspecting(worker);
+    }
+  }
+
+  function updateInspectingWorker(worker, delta) {
+    worker.inspectTimer -= delta;
+    worker.group.rotation.y += Math.sin(clock.elapsedTime * 4 + worker.wobblePhase) * 0.01;
+
+    if (worker.inspectTimer <= 0) {
+      enterCarrying(worker);
+    }
+  }
+
+  function updateCarryingWorker(worker, delta) {
+    if (!worker.dropOffPoint) {
+      worker.dropOffPoint = chooseWorkerDropOffPoint();
+    }
+
+    const arrived = moveWorkerToward(worker, worker.dropOffPoint, delta, worker.speed * 0.88);
+
+    if (arrived) {
+      deliverWorkerBlock(worker);
+    }
+  }
+
+  function assignWorkerTarget(worker) {
+    const block = findClaimableBlock(worker);
+
+    if (!block) {
+      worker.targetBlock = null;
+      return;
+    }
+
+    block.claimedBy = worker;
+    worker.targetBlock = block;
+    worker.targetPoint = {
+      x: block.mesh.position.x + randomBetween(-0.28, 0.28),
+      z: block.mesh.position.z + randomBetween(-0.28, 0.28),
+    };
+    worker.pauseTimer = randomBetween(0.16, 0.42);
+  }
+
+  function findClaimableBlock(worker) {
+    const candidates = fallingBlocks.filter((block) => (
+      block.state === "settled" &&
+      !block.claimedBy &&
+      !block.delivered &&
+      block.mesh.visible
+    ));
+
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    candidates.sort((a, b) => {
+      const aDistance = distance2D(worker.group.position, a.mesh.position) + randomBetween(0, 1.5);
+      const bDistance = distance2D(worker.group.position, b.mesh.position) + randomBetween(0, 1.5);
+      return aDistance - bDistance;
+    });
+
+    return candidates[0];
+  }
+
+  function getWorkerApproachPoint(worker) {
+    const blockPosition = worker.targetBlock.mesh.position;
+    const base = worker.targetPoint || blockPosition;
+    const dx = blockPosition.x - worker.group.position.x;
+    const dz = blockPosition.z - worker.group.position.z;
+    const length = Math.max(0.001, Math.hypot(dx, dz));
+    const wobble = Math.sin(clock.elapsedTime * worker.wobbleSpeed + worker.wobblePhase) * 0.18;
+
+    return {
+      x: base.x + (-dz / length) * wobble,
+      z: base.z + (dx / length) * wobble,
+    };
+  }
+
+  function enterInspecting(worker) {
+    worker.state = "inspecting";
+    worker.inspectTimer = randomBetween(1.0, 2.0);
+    worker.pauseTimer = 0;
+    showWorkerSpeech(worker, chooseWorkerSpeech("inspect"), 2.1);
+    setTimedMessage(inspectingMessage);
+    updateWorkerStatus();
+  }
+
+  function enterCarrying(worker) {
+    if (!worker.targetBlock) {
+      worker.state = "searching";
+      return;
+    }
+
+    worker.state = "carrying";
+    worker.dropOffPoint = chooseWorkerDropOffPoint();
+    worker.targetBlock.mesh.visible = false;
+    worker.targetBlock.claimedBy = worker;
+    worker.carryMesh.material.color.copy(worker.targetBlock.mesh.material.color);
+    worker.carryMesh.visible = true;
+    showWorkerSpeech(worker, chooseWorkerSpeech("carry"), 2.0);
+    setTimedMessage(carryingMessage);
+    updateWorkerStatus();
+  }
+
+  function deliverWorkerBlock(worker) {
+    const block = worker.targetBlock;
+
+    if (block) {
+      block.mesh.visible = true;
+      block.mesh.position.set(
+        worker.dropOffPoint.x + randomBetween(-0.18, 0.18),
+        block.targetY,
+        worker.dropOffPoint.z + randomBetween(-0.18, 0.18)
+      );
+      block.mesh.rotation.set(
+        block.mesh.rotation.x * 0.5,
+        randomBetween(-0.55, 0.55),
+        block.mesh.rotation.z * 0.5
+      );
+      block.delivered = true;
+      block.claimedBy = null;
+      createLandingEffect(block.mesh.position, block.mesh.material.color);
+    }
+
+    worker.targetBlock = null;
+    worker.targetPoint = null;
+    worker.dropOffPoint = null;
+    worker.carryMesh.visible = false;
+    worker.state = "searching";
+    worker.pauseTimer = randomBetween(0.28, 0.8);
+
+    if (Math.random() < 0.5) {
+      showWorkerSpeech(worker, chooseWorkerSpeech("done"), 1.8);
+    }
+
+    updateWorkerStatus();
+  }
+
+  function chooseWorkerDropOffPoint() {
+    const target = workerDropOffTargets[Math.floor(Math.random() * workerDropOffTargets.length)];
+    return {
+      x: target.x + randomBetween(-target.radius, target.radius),
+      z: target.z + randomBetween(-target.radius, target.radius),
+    };
+  }
+
+  function moveWorkerToward(worker, target, delta, speed) {
+    const dx = target.x - worker.group.position.x;
+    const dz = target.z - worker.group.position.z;
+    const distance = Math.hypot(dx, dz);
+
+    if (distance < 0.18) {
+      return true;
+    }
+
+    const step = Math.min(distance, speed * delta);
+    const nx = dx / distance;
+    const nz = dz / distance;
+    worker.group.position.x += nx * step;
+    worker.group.position.z += nz * step;
+    worker.group.rotation.y = Math.atan2(nx, nz);
+    return false;
+  }
+
+  function chooseWorkerSpeech(context) {
+    if (context === "inspect") {
+      return Math.random() < 0.28 ? "まだ なまえがない" : "これ、つかえそう";
+    }
+
+    if (context === "carry") {
+      return Math.random() < 0.35 ? "ここに はこぼう" : workerSpeechLines[Math.floor(Math.random() * workerSpeechLines.length)];
+    }
+
+    return workerSpeechLines[Math.floor(Math.random() * workerSpeechLines.length)];
+  }
+
+  function showWorkerSpeech(worker, line, duration = 2) {
+    activeSpeechWorker = worker;
+    workerSpeechUntil = clock.elapsedTime + duration;
+    workerSpeech.textContent = line;
+    workerSpeech.style.display = "block";
+    worker.speechCooldown = randomBetween(2.2, 4.2);
+    messageText.textContent = `作業員「${line}」`;
+  }
+
+  function updateWorkerSpeech(elapsed) {
+    if (!activeSpeechWorker || elapsed > workerSpeechUntil || !workersEnabled) {
+      hideWorkerSpeech();
+      return;
+    }
+
+    const position = activeSpeechWorker.group.position.clone();
+    position.y += 1.7;
+    position.project(camera);
+
+    if (position.z < -1 || position.z > 1) {
+      workerSpeech.style.display = "none";
+      return;
+    }
+
+    const width = renderer.domElement.clientWidth;
+    const height = renderer.domElement.clientHeight;
+    const x = (position.x * 0.5 + 0.5) * width;
+    const y = (-position.y * 0.5 + 0.5) * height;
+
+    workerSpeech.style.display = "block";
+    workerSpeech.style.left = `${x}px`;
+    workerSpeech.style.top = `${y}px`;
+  }
+
+  function hideWorkerSpeech() {
+    activeSpeechWorker = null;
+    workerSpeechUntil = 0;
+    workerSpeech.style.display = "none";
+  }
+
+  function distance2D(a, b) {
+    return Math.hypot(a.x - b.x, a.z - b.z);
   }
 
   function toggleBlockRain() {
@@ -785,6 +1150,8 @@
       bounceTime: 0,
       bounceDuration: randomBetween(0.28, 0.42),
       finalRotationY: randomBetween(-0.5, 0.5),
+      claimedBy: null,
+      delivered: false,
     });
 
     updateBlockCount();
@@ -823,7 +1190,7 @@
   function updateFallingBlockRain(elapsed, delta) {
     if (rainEnabled && elapsed >= nextBlockDropAt) {
       spawnFallingBlock();
-      nextBlockDropAt = elapsed + randomBetween(0.95, 1.55);
+      nextBlockDropAt = elapsed + randomBetween(1.25, 2.05);
     }
 
     for (const block of fallingBlocks) {
@@ -894,9 +1261,18 @@
 
   function pruneFallingBlocks() {
     while (fallingBlocks.length >= fallingBlockLimit) {
-      const settledIndex = fallingBlocks.findIndex((block) => block.state === "settled");
+      const settledIndex = fallingBlocks.findIndex((block) => block.state === "settled" && !block.claimedBy);
       const removeIndex = settledIndex >= 0 ? settledIndex : 0;
       const [removed] = fallingBlocks.splice(removeIndex, 1);
+
+      if (removed.claimedBy) {
+        removed.claimedBy.targetBlock = null;
+        removed.claimedBy.targetPoint = null;
+        removed.claimedBy.dropOffPoint = null;
+        removed.claimedBy.carryMesh.visible = false;
+        removed.claimedBy.state = "searching";
+      }
+
       scene.remove(removed.mesh);
       disposeObject(removed.mesh);
     }
@@ -1049,6 +1425,7 @@
     });
 
     updateFallingBlockRain(elapsed, delta);
+    updateWorkerAgents(elapsed, delta);
 
     if (currentMode === MODES.HERO && Math.abs(heroLookSway) > 0.001) {
       heroLookSway *= 0.92;
@@ -1059,6 +1436,7 @@
       controls.update();
     }
 
+    updateWorkerSpeech(elapsed);
     renderer.render(scene, camera);
   }
 })();

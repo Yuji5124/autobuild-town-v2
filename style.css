@@ -240,7 +240,8 @@ button {
 }
 
 .camera-panel,
-.rain-panel {
+.rain-panel,
+.worker-panel {
   top: 18px;
   right: 18px;
   display: flex;
@@ -258,6 +259,11 @@ button {
 .rain-panel {
   top: 82px;
   background: rgba(217, 246, 255, 0.58);
+}
+
+.worker-panel {
+  top: 146px;
+  background: rgba(255, 248, 221, 0.62);
 }
 
 .hud-button {
@@ -285,7 +291,8 @@ button {
   box-shadow: 0 0 0 3px rgba(255, 207, 74, 0.35), 0 6px 14px var(--shadow);
 }
 
-.block-counter {
+.block-counter,
+.worker-state {
   display: inline-flex;
   align-items: center;
   min-height: 42px;
@@ -297,6 +304,39 @@ button {
   font-size: 0.95rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.worker-speech {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  display: none;
+  max-width: min(230px, calc(100vw - 28px));
+  padding: 9px 12px;
+  border: 2px solid rgba(36, 50, 71, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 18px var(--shadow);
+  color: var(--ink);
+  font-size: 0.94rem;
+  font-weight: 800;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+}
+
+.worker-speech::after {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid rgba(36, 50, 71, 0.2);
+  border-bottom: 2px solid rgba(36, 50, 71, 0.2);
+  background: rgba(255, 255, 255, 0.94);
+  content: "";
+  transform: translateX(-50%) rotate(45deg);
 }
 
 .message-window {
@@ -331,7 +371,8 @@ button {
   }
 
   .camera-panel,
-  .rain-panel {
+  .rain-panel,
+  .worker-panel {
     top: auto;
     right: 12px;
     left: 12px;
@@ -340,11 +381,15 @@ button {
   }
 
   .camera-panel {
-    bottom: 146px;
+    bottom: 328px;
   }
 
   .rain-panel {
-    bottom: 88px;
+    bottom: 196px;
+  }
+
+  .worker-panel {
+    bottom: 104px;
   }
 
   .mode-badge {
@@ -358,9 +403,15 @@ button {
     font-size: 0.88rem;
   }
 
-  .block-counter {
+  .block-counter,
+  .worker-state {
     flex: 1 1 130px;
     justify-content: center;
     font-size: 0.88rem;
+  }
+
+  .message-window {
+    min-height: 50px;
+    padding-block: 11px;
   }
 }
