@@ -292,7 +292,8 @@ button {
 }
 
 .block-counter,
-.worker-state {
+.worker-state,
+.material-counter {
   display: inline-flex;
   align-items: center;
   min-height: 42px;
@@ -304,6 +305,10 @@ button {
   font-size: 0.95rem;
   font-weight: 800;
   white-space: nowrap;
+}
+
+.material-counter {
+  background: rgba(217, 246, 255, 0.9);
 }
 
 .worker-speech {
@@ -404,7 +409,8 @@ button {
   }
 
   .block-counter,
-  .worker-state {
+  .worker-state,
+  .material-counter {
     flex: 1 1 130px;
     justify-content: center;
     font-size: 0.88rem;

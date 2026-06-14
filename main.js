@@ -11,6 +11,8 @@
   const blockCount = document.getElementById("block-count");
   const workerToggleButton = document.getElementById("worker-toggle-button");
   const workerStateLabel = document.getElementById("worker-state-label");
+  const materialCount = document.getElementById("material-count");
+  const materialGoalLabel = document.getElementById("material-goal");
   const workerSpeech = document.getElementById("worker-speech");
   const modeLabel = document.getElementById("mode-label");
   const messageText = document.getElementById("message-text");
@@ -30,6 +32,14 @@
   const workerOffMessage = "作業員たちは少し休んでいる。";
   const inspectingMessage = "これ、つかえそう。";
   const carryingMessage = "町はまだ、何になるのか考えている。";
+  const heroMaterialMessage = "中から見ると、材料がただの山ではなく、置かれた場所に見える。";
+  const goalReachedMessage = "材料が集まってきた。町は、まだ何を作るか考えている。";
+  const prepProgressMessage = "町の中心で、準備が少しだけ進んだ。";
+  const gatherMessages = [
+    "材料が、少しずつ町の中心に集まっていく。",
+    "まだ建物にはならない。でも、何かが始まりそうだ。",
+    "町は、落ちてきたものを自分の材料にしようとしている。",
+  ];
 
   const outsideCameraPosition = new THREE.Vector3(8.8, 5.9, 9.4);
   const outsideTarget = new THREE.Vector3(0.2, 1.05, -0.15);
@@ -46,10 +56,19 @@
     { name: "rocket-side", x: 3.85, z: -1.2, radiusX: 1.1, radiusZ: 0.95, weight: 2, landings: 0 },
     { name: "outer-town", x: -1.2, z: 3.9, radiusX: 2.3, radiusZ: 0.85, weight: 2, landings: 0 },
   ];
-  const workerDropOffTargets = [
-    { x: -1.45, z: -0.95, radius: 0.55 },
-    { x: 1.35, z: -0.9, radius: 0.5 },
-    { x: -3.25, z: -0.35, radius: 0.85 },
+  const materialGoal = 15;
+  const materialZones = [
+    { id: "left-yard", x: -2.8, z: 0.5, accent: 0x4d96ff, flag: 0xff6b6b, cols: 3, rows: 2, spacing: 0.46, platformTop: 0.19, slots: [], blocks: [] },
+    { id: "right-yard", x: 3.0, z: -0.5, accent: 0xff8f5a, flag: 0xffcc4d, cols: 3, rows: 2, spacing: 0.46, platformTop: 0.19, slots: [], blocks: [] },
+    { id: "back-yard", x: -0.6, z: -2.95, accent: 0x9d8cff, flag: 0x6bcb77, cols: 3, rows: 2, spacing: 0.46, platformTop: 0.19, slots: [], blocks: [] },
+  ];
+  const workerPlaceLines = [
+    "ここに おこう",
+    "あつまってきた",
+    "まだ かたちは きまってない",
+    "なにに なるかな",
+    "まだ なまえがない",
+    "このへん、つかえそう",
   ];
   const workerSpeechLines = [
     "これ、つかえそう",
@@ -86,6 +105,10 @@
   const fallingBlocks = [];
   const landingEffects = [];
   const workerAgents = [];
+  const materialBlocks = [];
+  const preparationStages = [];
+  let materialCollected = 0;
+  let materialGoalAnnounced = false;
 
   startButton.addEventListener("click", () => {
     titleScreen.classList.add("is-hidden");
@@ -142,6 +165,8 @@
     updateBlockCount();
     updateWorkerButton();
     updateWorkerStatus();
+    materialGoalLabel.textContent = String(materialGoal);
+    updateMaterialCount();
     spawnBlockBurst(4);
     nextBlockDropAt = clock.elapsedTime + 0.8;
 
@@ -296,7 +321,238 @@
     scene.add(darkPatch);
   }
 
+  function createMaterialZones() {
+    materialZones.forEach((zone) => {
+      buildMaterialZoneVisual(zone);
+
+      const startX = zone.x - ((zone.cols - 1) / 2) * zone.spacing;
+      const startZ = zone.z - ((zone.rows - 1) / 2) * zone.spacing;
+
+      for (let r = 0; r < zone.rows; r += 1) {
+        for (let c = 0; c < zone.cols; c += 1) {
+          const sx = startX + c * zone.spacing;
+          const sz = startZ + r * zone.spacing;
+          zone.slots.push({ x: sx, z: sz, topY: zone.platformTop, reservedBy: null, blockMesh: null });
+          addSlotMarker(zone, sx, sz);
+        }
+      }
+    });
+  }
+
+  function buildMaterialZoneVisual(zone) {
+    const width = zone.cols * zone.spacing + 0.46;
+    const depth = zone.rows * zone.spacing + 0.46;
+    const halfW = width / 2;
+    const halfD = depth / 2;
+
+    const platform = new THREE.Mesh(
+      new THREE.BoxGeometry(width, 0.1, depth),
+      new THREE.MeshStandardMaterial({ color: 0xe9c987, roughness: 0.92 })
+    );
+    platform.position.set(zone.x, 0.14, zone.z);
+    platform.receiveShadow = true;
+    scene.add(platform);
+    zone.platformTop = 0.19;
+
+    const postMaterial = new THREE.MeshStandardMaterial({ color: zone.accent, roughness: 0.6 });
+    [[-halfW, -halfD], [halfW, -halfD], [-halfW, halfD], [halfW, halfD]].forEach(([ox, oz]) => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4, 10), postMaterial);
+      post.position.set(zone.x + ox, 0.34, zone.z + oz);
+      post.castShadow = true;
+      scene.add(post);
+    });
+
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.55, 0.16, 0.04),
+      new THREE.MeshStandardMaterial({ color: 0xfff3c9, roughness: 0.8 })
+    );
+    board.position.set(zone.x, 0.31, zone.z - halfD - 0.03);
+    board.castShadow = true;
+    scene.add(board);
+
+    const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.72, 10), postMaterial);
+    flagPole.position.set(zone.x - halfW, 0.5, zone.z - halfD);
+    flagPole.castShadow = true;
+    scene.add(flagPole);
+
+    const flag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.32, 0.2, 0.02),
+      new THREE.MeshStandardMaterial({ color: zone.flag, roughness: 0.7 })
+    );
+    flag.position.set(zone.x - halfW + 0.18, 0.74, zone.z - halfD);
+    flag.castShadow = true;
+    scene.add(flag);
+  }
+
+  function addSlotMarker(zone, x, z) {
+    const marker = new THREE.Mesh(
+      new THREE.BoxGeometry(zone.spacing * 0.72, 0.02, zone.spacing * 0.72),
+      new THREE.MeshStandardMaterial({ color: 0xd9b06a, roughness: 0.95 })
+    );
+    marker.position.set(x, zone.platformTop + 0.006, z);
+    marker.receiveShadow = true;
+    scene.add(marker);
+  }
+
+  function createPreparationProps() {
+    addPreparationStage(3, buildPrepFlag(-0.95, 1.1, 0xff6b6b));
+    addPreparationStage(6, buildPrepFence(1.55, 0.55));
+    addPreparationStage(9, buildPrepSlab(0.2, -0.05));
+    addPreparationStage(12, buildPrepGuideFrame(0.1, -0.05));
+    addPreparationStage(15, buildPrepCenterFlag(0.1, -0.45));
+  }
+
+  function addPreparationStage(threshold, object) {
+    object.visible = false;
+    scene.add(object);
+    preparationStages.push({ threshold, object, revealed: false });
+  }
+
+  function buildPrepFlag(x, z, color) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.03, 0.6, 10),
+      new THREE.MeshStandardMaterial({ color: 0xb0782f, roughness: 0.7 })
+    );
+    pole.position.y = 0.4;
+    pole.castShadow = true;
+    group.add(pole);
+
+    const flag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.3, 0.18, 0.02),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.7 })
+    );
+    flag.position.set(0.17, 0.6, 0);
+    flag.castShadow = true;
+    group.add(flag);
+    return group;
+  }
+
+  function buildPrepFence(x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const material = new THREE.MeshStandardMaterial({ color: 0xf7f0c9, roughness: 0.75 });
+    [-0.45, 0.45].forEach((oz) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.1), material);
+      post.position.set(0, 0.25, oz);
+      post.castShadow = true;
+      group.add(post);
+    });
+
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 1.0), material);
+    rail.position.set(0, 0.32, 0);
+    rail.castShadow = true;
+    group.add(rail);
+    return group;
+  }
+
+  function buildPrepSlab(x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 0.2, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0xffe7a6, roughness: 0.78 })
+    );
+    slab.position.set(0, 0.18, 0);
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    group.add(slab);
+
+    const smallSlab = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.18, 0.45),
+      new THREE.MeshStandardMaterial({ color: 0xf3d68a, roughness: 0.8 })
+    );
+    smallSlab.position.set(0.45, 0.16, 0.2);
+    smallSlab.rotation.y = 0.2;
+    smallSlab.castShadow = true;
+    group.add(smallSlab);
+    return group;
+  }
+
+  function buildPrepGuideFrame(x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const box = new THREE.BoxGeometry(1.7, 0.95, 1.15);
+    const fill = new THREE.Mesh(
+      box,
+      new THREE.MeshStandardMaterial({
+        color: 0x8fd3ff,
+        transparent: true,
+        opacity: 0.14,
+        roughness: 0.4,
+        depthWrite: false,
+      })
+    );
+    fill.position.y = 0.6;
+    group.add(fill);
+
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(box),
+      new THREE.LineBasicMaterial({ color: 0x4d96ff, transparent: true, opacity: 0.6 })
+    );
+    edges.position.y = 0.6;
+    group.add(edges);
+    return group;
+  }
+
+  function buildPrepCenterFlag(x, z) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.2, 0.24, 0.14, 16),
+      new THREE.MeshStandardMaterial({ color: 0xd8b75a, roughness: 0.85 })
+    );
+    base.position.y = 0.1;
+    base.castShadow = true;
+    group.add(base);
+
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.035, 1.1, 12),
+      new THREE.MeshStandardMaterial({ color: 0xb0782f, roughness: 0.7 })
+    );
+    pole.position.y = 0.66;
+    pole.castShadow = true;
+    group.add(pole);
+
+    const flag = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.26, 0.02),
+      new THREE.MeshStandardMaterial({ color: 0xff8f5a, roughness: 0.7 })
+    );
+    flag.position.set(0.22, 1.05, 0);
+    flag.castShadow = true;
+    group.add(flag);
+    return group;
+  }
+
+  function revealPreparation() {
+    let revealedAny = false;
+
+    preparationStages.forEach((stage) => {
+      if (!stage.revealed && materialCollected >= stage.threshold) {
+        stage.revealed = true;
+        stage.object.visible = true;
+        revealedAny = true;
+        createLandingEffect(stage.object.position, new THREE.Color(0xffe08a));
+        setTimedMessage(prepProgressMessage);
+      }
+    });
+
+    return revealedAny;
+  }
+
+  function updateMaterialCount() {
+    materialCount.textContent = String(materialCollected);
+  }
+
   function createTownObjects() {
+    createMaterialZones();
+    createPreparationProps();
     createColorBlocks();
     createWorkInProgressDetails();
     createOddPassage();
@@ -765,6 +1021,8 @@
       targetBlock: null,
       targetPoint: null,
       dropOffPoint: null,
+      targetZone: null,
+      targetSlot: null,
       inspectTimer: 0,
       pauseTimer: randomBetween(0.2, 0.8),
       speechCooldown: randomBetween(1.2, 2.4),
@@ -874,8 +1132,10 @@
   }
 
   function updateCarryingWorker(worker, delta) {
-    if (!worker.dropOffPoint) {
-      worker.dropOffPoint = chooseWorkerDropOffPoint();
+    if (!worker.dropOffPoint || !worker.targetSlot) {
+      worker.carryMesh.visible = false;
+      worker.state = "searching";
+      return;
     }
 
     const arrived = moveWorkerToward(worker, worker.dropOffPoint, delta, worker.speed * 0.88);
@@ -953,7 +1213,9 @@
     }
 
     worker.state = "carrying";
-    worker.dropOffPoint = chooseWorkerDropOffPoint();
+    worker.targetZone = chooseMaterialZoneForWorker(worker);
+    worker.targetSlot = reserveZoneSlot(worker.targetZone, worker);
+    worker.dropOffPoint = { x: worker.targetSlot.x, z: worker.targetSlot.z };
     worker.targetBlock.mesh.visible = false;
     worker.targetBlock.claimedBy = worker;
     worker.carryMesh.material.color.copy(worker.targetBlock.mesh.material.color);
@@ -963,46 +1225,123 @@
     updateWorkerStatus();
   }
 
+  function chooseMaterialZoneForWorker(worker) {
+    let best = materialZones[0];
+    let bestScore = Infinity;
+
+    materialZones.forEach((zone) => {
+      const score = distance2D(worker.group.position, zone) + randomBetween(0, 1.4);
+      if (score < bestScore) {
+        bestScore = score;
+        best = zone;
+      }
+    });
+
+    return best;
+  }
+
+  function reserveZoneSlot(zone, worker) {
+    let slot = zone.slots.find((candidate) => !candidate.reservedBy && !candidate.blockMesh);
+
+    if (!slot && zone.blocks.length > 0) {
+      const oldest = zone.blocks[0];
+      slot = oldest.slot;
+      freeMaterial(oldest);
+    }
+
+    if (!slot) {
+      slot = zone.slots[0];
+    }
+
+    slot.reservedBy = worker;
+    return slot;
+  }
+
+  function freeMaterial(material) {
+    material.slot.blockMesh = null;
+    scene.remove(material.mesh);
+    disposeObject(material.mesh);
+
+    const materialIndex = materialBlocks.indexOf(material);
+    if (materialIndex >= 0) {
+      materialBlocks.splice(materialIndex, 1);
+    }
+
+    const zoneIndex = material.zone.blocks.indexOf(material);
+    if (zoneIndex >= 0) {
+      material.zone.blocks.splice(zoneIndex, 1);
+    }
+  }
+
+  function releaseWorkerReservation(worker) {
+    if (worker.targetSlot && worker.targetSlot.reservedBy === worker) {
+      worker.targetSlot.reservedBy = null;
+    }
+    worker.targetSlot = null;
+    worker.targetZone = null;
+  }
+
   function deliverWorkerBlock(worker) {
     const block = worker.targetBlock;
+    const zone = worker.targetZone;
+    const slot = worker.targetSlot;
 
-    if (block) {
+    if (block && zone && slot) {
+      const height = (block.mesh.geometry.parameters && block.mesh.geometry.parameters.height) || 0.4;
       block.mesh.visible = true;
       block.mesh.position.set(
-        worker.dropOffPoint.x + randomBetween(-0.18, 0.18),
-        block.targetY,
-        worker.dropOffPoint.z + randomBetween(-0.18, 0.18)
+        slot.x + randomBetween(-0.06, 0.06),
+        slot.topY + height / 2,
+        slot.z + randomBetween(-0.06, 0.06)
       );
-      block.mesh.rotation.set(
-        block.mesh.rotation.x * 0.5,
-        randomBetween(-0.55, 0.55),
-        block.mesh.rotation.z * 0.5
-      );
+      block.mesh.rotation.set(0, randomBetween(-0.12, 0.12), 0);
       block.delivered = true;
       block.claimedBy = null;
+
+      slot.reservedBy = null;
+      slot.blockMesh = block.mesh;
+
+      const material = { mesh: block.mesh, zone, slot };
+      materialBlocks.push(material);
+      zone.blocks.push(material);
+
+      const fallingIndex = fallingBlocks.indexOf(block);
+      if (fallingIndex >= 0) {
+        fallingBlocks.splice(fallingIndex, 1);
+      }
+      updateBlockCount();
       createLandingEffect(block.mesh.position, block.mesh.material.color);
+
+      materialCollected += 1;
+      updateMaterialCount();
+
+      if (worker.speechCooldown <= 0) {
+        showWorkerSpeech(worker, workerPlaceLines[Math.floor(Math.random() * workerPlaceLines.length)], 1.7);
+      }
+
+      const revealed = revealPreparation();
+      if (materialCollected >= materialGoal && !materialGoalAnnounced) {
+        materialGoalAnnounced = true;
+        setTimedMessage(goalReachedMessage);
+      } else if (!revealed && Math.random() < 0.4) {
+        setTimedMessage(gatherMessages[Math.floor(Math.random() * gatherMessages.length)]);
+      }
+    } else if (block) {
+      block.mesh.visible = true;
+      block.delivered = true;
+      block.claimedBy = null;
     }
 
     worker.targetBlock = null;
     worker.targetPoint = null;
     worker.dropOffPoint = null;
+    worker.targetZone = null;
+    worker.targetSlot = null;
     worker.carryMesh.visible = false;
     worker.state = "searching";
     worker.pauseTimer = randomBetween(0.28, 0.8);
 
-    if (Math.random() < 0.5) {
-      showWorkerSpeech(worker, chooseWorkerSpeech("done"), 1.8);
-    }
-
     updateWorkerStatus();
-  }
-
-  function chooseWorkerDropOffPoint() {
-    const target = workerDropOffTargets[Math.floor(Math.random() * workerDropOffTargets.length)];
-    return {
-      x: target.x + randomBetween(-target.radius, target.radius),
-      z: target.z + randomBetween(-target.radius, target.radius),
-    };
   }
 
   function moveWorkerToward(worker, target, delta, speed) {
@@ -1266,11 +1605,13 @@
       const [removed] = fallingBlocks.splice(removeIndex, 1);
 
       if (removed.claimedBy) {
-        removed.claimedBy.targetBlock = null;
-        removed.claimedBy.targetPoint = null;
-        removed.claimedBy.dropOffPoint = null;
-        removed.claimedBy.carryMesh.visible = false;
-        removed.claimedBy.state = "searching";
+        const owner = removed.claimedBy;
+        releaseWorkerReservation(owner);
+        owner.targetBlock = null;
+        owner.targetPoint = null;
+        owner.dropOffPoint = null;
+        owner.carryMesh.visible = false;
+        owner.state = "searching";
       }
 
       scene.remove(removed.mesh);
@@ -1319,7 +1660,7 @@
       }
     } else {
       applyHeroCamera();
-      setTimedMessage(heroMessage);
+      setTimedMessage(heroMessage, heroMaterialMessage);
     }
   }
 
@@ -1345,8 +1686,9 @@
     messageText.textContent = message;
 
     if (nextMessage) {
+      const modeAtCall = currentMode;
       initialMessageTimer = window.setTimeout(() => {
-        if (currentMode === MODES.OUTSIDE) {
+        if (currentMode === modeAtCall) {
           messageText.textContent = nextMessage;
         }
       }, 2400);
