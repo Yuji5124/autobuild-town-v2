@@ -9,6 +9,7 @@
   const rainToggleButton = document.getElementById("rain-toggle-button");
   const burstButton = document.getElementById("burst-button");
   const blockCount = document.getElementById("block-count");
+  const blockLimitLabel = document.getElementById("block-limit");
   const workerToggleButton = document.getElementById("worker-toggle-button");
   const workerStateLabel = document.getElementById("worker-state-label");
   const materialCount = document.getElementById("material-count");
@@ -35,10 +36,12 @@
 
   const outsideMessage = "外から見ると、町はまだ未完成の構造物に見える。";
   const heroMessage = "中から見ると、作業員が材料を気にしているのが分かる。";
-  const initialMessage = "落ちてきた材料に、作業員たちが気づきはじめた。";
+  const initialMessage = "名前のない町は、まだ静かに材料を待っている。";
   const centralMessage = "ここに、まだ名前のない何かが作られようとしている。";
-  const rainOnMessage = "空からブロックが落ちてくる。町はそれを材料にしようとしている。";
+  const rainStartMessage = "空から、今日の材料が少しずつ降ってきた。";
+  const rainOnMessage = "ブロックの雨が、ゆっくり町に材料を運んでくる。";
   const rainOffMessage = "ブロックの雨が止まった。町は少し静かになった。";
+  const burstMessage = "少しだけ、今日の材料が降ってきた。";
   const workerOnMessage = "作業員たちは、使えそうなブロックを探している。";
   const workerOffMessage = "作業員たちは少し休んでいる。";
   const inspectingMessage = "これ、つかえそう。";
@@ -62,16 +65,20 @@
   const heroMoveSpeed = 2.2;
   const heroTurnSpeed = 1.8;
   const heroBound = 5.6;
-  const fallingBlockLimit = 80;
+  const fallingBlockLimit = 62;
+  // 彩度をすこし抑えたカラフルなパレット（町全体が騒がしくなりすぎないように）。
   const fallingPalette = [
-    0xff6b6b, 0xffcc4d, 0x4d96ff, 0x6bcb77, 0xff8f5a,
-    0x9d8cff, 0x4dd6c7, 0xf2ef6d, 0xf58bc3, 0x7dd3fc,
+    0xef8080, 0xf0c45c, 0x5f9be0, 0x77c283, 0xef9c6f,
+    0xa79ae0, 0x66c6bd, 0xdcd674, 0xe79ec0, 0x8fc4e8,
   ];
-  const dropZones = [
-    { name: "foundation", x: 0.05, z: -0.2, radiusX: 2.0, radiusZ: 1.45, weight: 5, landings: 0 },
-    { name: "block-yard", x: -3.25, z: -0.35, radiusX: 1.2, radiusZ: 0.85, weight: 3, landings: 0 },
-    { name: "rocket-side", x: 3.85, z: -1.2, radiusX: 1.1, radiusZ: 0.95, weight: 2, landings: 0 },
-    { name: "outer-town", x: -1.2, z: 3.9, radiusX: 2.3, radiusZ: 0.85, weight: 2, landings: 0 },
+  // ロケット・塔・小屋まわりに少しだけ落とすためのアンカー。
+  const landmarkAnchors = [
+    { x: 4.5, z: -0.35 },
+    { x: -1.45, z: -4.1 },
+    { x: -4.4, z: -3.8 },
+    { x: 4.0, z: -4.0 },
+    { x: -4.6, z: 4.0 },
+    { x: 3.6, z: 3.8 },
   ];
   const materialGoal = 15;
   const materialZones = [
@@ -209,8 +216,8 @@
   resetButton.addEventListener("click", resetCameraForCurrentMode);
   rainToggleButton.addEventListener("click", toggleBlockRain);
   burstButton.addEventListener("click", () => {
-    spawnBlockBurst(7);
-    setTimedMessage(rainOnMessage);
+    spawnBlockBurst(Math.floor(randomBetween(3, 6)));
+    setTimedMessage(burstMessage);
   });
   workerToggleButton.addEventListener("click", toggleWorkers);
   window.addEventListener("resize", resizeRenderer);
@@ -255,8 +262,8 @@
     updateWorkerStatus();
     materialGoalLabel.textContent = String(materialGoal);
     updateMaterialCount();
-    spawnBlockBurst(4);
-    nextBlockDropAt = clock.elapsedTime + 0.8;
+    // 開始直後はすぐ降らせない。少し待ってからゆっくり降り始める。
+    nextBlockDropAt = clock.elapsedTime + randomBetween(2.4, 3.6);
 
     if (!animationStarted) {
       animationStarted = true;
@@ -1598,7 +1605,7 @@
     setTimedMessage(rainEnabled ? rainOnMessage : rainOffMessage);
 
     if (rainEnabled) {
-      nextBlockDropAt = clock.elapsedTime + 0.35;
+      nextBlockDropAt = clock.elapsedTime + randomBetween(0.6, 1.0);
     }
   }
 
@@ -1609,6 +1616,7 @@
 
   function updateBlockCount() {
     blockCount.textContent = String(fallingBlocks.length);
+    blockLimitLabel.textContent = String(fallingBlockLimit);
   }
 
   function spawnBlockBurst(amount) {
@@ -1620,20 +1628,19 @@
   function spawnFallingBlock(stagger = 0) {
     pruneFallingBlocks();
 
-    const zone = chooseDropZone();
-    const landing = chooseLandingPoint(zone);
-    const size = {
-      x: randomBetween(0.38, 0.78),
-      y: randomBetween(0.3, 0.72),
-      z: randomBetween(0.38, 0.82),
-    };
+    const landing = pickLandingPoint();
+    // 基本は少し小さめ。たまに大きめが混ざる程度。
+    const big = Math.random() < 0.16;
+    const size = big
+      ? { x: randomBetween(0.6, 0.84), y: randomBetween(0.5, 0.74), z: randomBetween(0.6, 0.86) }
+      : { x: randomBetween(0.32, 0.56), y: randomBetween(0.26, 0.5), z: randomBetween(0.32, 0.58) };
     const color = fallingPalette[Math.floor(Math.random() * fallingPalette.length)];
-    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.02 });
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.02 });
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
     const startY = randomBetween(7.2, 10.4) + stagger * 2.2;
     const fallLeanX = randomBetween(-0.42, 0.42);
     const fallLeanZ = randomBetween(-0.42, 0.42);
-    const pileLift = Math.min(0.56, zone.landings * 0.014) + randomBetween(0, 0.1);
+    const pileLift = randomBetween(0, 0.12);
 
     mesh.position.set(landing.x + fallLeanX, startY, landing.z + fallLeanZ);
     mesh.rotation.set(
@@ -1647,7 +1654,6 @@
 
     fallingBlocks.push({
       mesh,
-      zone,
       state: "falling",
       targetX: landing.x,
       targetZ: landing.z,
@@ -1670,51 +1676,89 @@
     updateBlockCount();
   }
 
-  function chooseDropZone() {
-    const totalWeight = dropZones.reduce((sum, zone) => sum + zone.weight, 0);
-    let pick = Math.random() * totalWeight;
+  // 落下地点を完全ランダムにせず、町なりの分布で選ぶ。
+  // 約40%中央外周リング / 25%材料置き場まわり / 20%町の外周・道沿い / 10%ランドマーク / 5%変な場所。
+  function pickLandingPoint() {
+    const roll = Math.random();
+    const cx = centralBuildCenter.x;
+    const cz = centralBuildCenter.z;
+    let x;
+    let z;
 
-    for (const zone of dropZones) {
-      pick -= zone.weight;
-      if (pick <= 0) {
-        return zone;
-      }
+    if (roll < 0.4) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = randomBetween(2.1, 3.1);
+      x = cx + Math.cos(angle) * radius;
+      z = cz + Math.sin(angle) * radius;
+    } else if (roll < 0.65) {
+      const yard = materialZones[Math.floor(Math.random() * materialZones.length)];
+      const angle = Math.random() * Math.PI * 2;
+      const radius = randomBetween(0.7, 1.25);
+      x = yard.x + Math.cos(angle) * radius;
+      z = yard.z + Math.sin(angle) * radius;
+    } else if (roll < 0.85) {
+      const angle = Math.random() * Math.PI * 2;
+      const radius = randomBetween(4.4, 6.0);
+      x = cx + Math.cos(angle) * radius;
+      z = cz + Math.sin(angle) * radius;
+    } else if (roll < 0.95) {
+      const anchor = landmarkAnchors[Math.floor(Math.random() * landmarkAnchors.length)];
+      x = anchor.x + randomBetween(-0.8, 0.8);
+      z = anchor.z + randomBetween(-0.8, 0.8);
+    } else {
+      x = randomBetween(-5.5, 5.5);
+      z = randomBetween(-5.5, 5.5);
     }
 
-    return dropZones[0];
+    return adjustLandingPoint(x, z);
   }
 
-  function chooseLandingPoint(zone) {
-    let x = zone.x + randomBetween(-zone.radiusX, zone.radiusX);
-    let z = zone.z + randomBetween(-zone.radiusZ, zone.radiusZ);
-    const distanceFromHero = Math.hypot(x - heroStartPosition.x, z - heroStartPosition.z);
-
-    if (distanceFromHero < 1.35) {
-      z -= 1.45;
-      x += x < heroStartPosition.x ? -0.45 : 0.45;
+  function adjustLandingPoint(x, z) {
+    // 主人公の初期位置の目の前には落としすぎない。
+    const heroDx = x - heroStartPosition.x;
+    const heroDz = z - heroStartPosition.z;
+    const heroDistance = Math.hypot(heroDx, heroDz);
+    if (heroDistance < 1.6) {
+      const length = heroDistance < 0.001 ? 1 : heroDistance;
+      x = heroStartPosition.x + (heroDx / length) * 1.8;
+      z = heroStartPosition.z + (heroDz / length) * 1.8;
     }
 
-    // 中央の作りかけ構造の上には積まない。材料は構造の周りにリング状に集まる。
+    // 中央の作りかけ構造の中・真上には積まない。材料は構造の周りに集まる。
     const buildDx = x - centralBuildCenter.x;
     const buildDz = z - centralBuildCenter.z;
-    if (Math.abs(buildDx) < 0.95 && Math.abs(buildDz) < 0.7) {
-      if (Math.abs(buildDx) / 0.95 >= Math.abs(buildDz) / 0.7) {
-        x = centralBuildCenter.x + (buildDx >= 0 ? 1 : -1) * randomBetween(0.95, 1.5);
+    if (Math.abs(buildDx) < 1.0 && Math.abs(buildDz) < 0.75) {
+      if (Math.abs(buildDx) / 1.0 >= Math.abs(buildDz) / 0.75) {
+        x = centralBuildCenter.x + (buildDx >= 0 ? 1 : -1) * randomBetween(1.0, 1.6);
       } else {
-        z = centralBuildCenter.z + (buildDz >= 0 ? 1 : -1) * randomBetween(0.7, 1.3);
+        z = centralBuildCenter.z + (buildDz >= 0 ? 1 : -1) * randomBetween(0.75, 1.4);
       }
     }
 
+    // 観察スポットの目印や通路は埋めない。
+    observationSpots.forEach((spot) => {
+      const spotDx = x - spot.position.x;
+      const spotDz = z - spot.position.z;
+      const spotDistance = Math.hypot(spotDx, spotDz);
+      if (spotDistance < 0.85) {
+        const length = spotDistance < 0.001 ? 1 : spotDistance;
+        x = spot.position.x + (spotDx / length) * 0.95;
+        z = spot.position.z + (spotDz / length) * 0.95;
+      }
+    });
+
     return {
-      x: THREE.MathUtils.clamp(x, -6.5, 6.5),
-      z: THREE.MathUtils.clamp(z, -6.5, 6.5),
+      x: THREE.MathUtils.clamp(x, -6.4, 6.4),
+      z: THREE.MathUtils.clamp(z, -6.4, 6.4),
     };
   }
 
   function updateFallingBlockRain(elapsed, delta) {
     if (rainEnabled && elapsed >= nextBlockDropAt) {
       spawnFallingBlock();
-      nextBlockDropAt = elapsed + randomBetween(1.25, 2.05);
+      // 基本はゆっくり。時間経過でほんの少しだけペースを上げる（上げすぎない）。
+      const ramp = Math.min(0.4, (elapsed / 120) * 0.4);
+      nextBlockDropAt = elapsed + randomBetween(1.8, 2.5) - ramp;
     }
 
     for (const block of fallingBlocks) {
@@ -1732,13 +1776,12 @@
           block.mesh.rotation.y = block.finalRotationY;
           block.mesh.rotation.z *= 0.45;
           block.state = "bouncing";
-          block.zone.landings += 1;
           createLandingEffect(block.mesh.position, block.mesh.material.color);
         }
       } else if (block.state === "bouncing") {
         block.bounceTime += delta;
         const progress = THREE.MathUtils.clamp(block.bounceTime / block.bounceDuration, 0, 1);
-        const hop = Math.sin(progress * Math.PI) * 0.16 * (1 - progress);
+        const hop = Math.sin(progress * Math.PI) * 0.1 * (1 - progress);
         block.mesh.position.y = block.targetY + hop;
         block.mesh.rotation.y += 0.4 * delta * (1 - progress);
 
@@ -1756,14 +1799,14 @@
     const effectMaterial = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.34,
+      opacity: 0.22,
       depthWrite: false,
     });
     const effect = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.018, 28), effectMaterial);
     effect.position.set(position.x, 0.11, position.z);
-    effect.scale.set(0.38, 1, 0.38);
+    effect.scale.set(0.34, 1, 0.34);
     scene.add(effect);
-    landingEffects.push({ mesh: effect, age: 0, duration: 0.52 });
+    landingEffects.push({ mesh: effect, age: 0, duration: 0.48 });
   }
 
   function updateLandingEffects(delta) {
@@ -1771,9 +1814,9 @@
       const effect = landingEffects[i];
       effect.age += delta;
       const progress = THREE.MathUtils.clamp(effect.age / effect.duration, 0, 1);
-      const scale = 0.38 + progress * 1.35;
+      const scale = 0.34 + progress * 1.1;
       effect.mesh.scale.set(scale, 1, scale);
-      effect.mesh.material.opacity = 0.34 * (1 - progress);
+      effect.mesh.material.opacity = 0.22 * (1 - progress);
 
       if (progress >= 1) {
         scene.remove(effect.mesh);
@@ -1862,15 +1905,15 @@
 
     initialMessageTimer = window.setTimeout(() => {
       if (currentMode === MODES.OUTSIDE) {
-        messageText.textContent = rainOnMessage;
+        messageText.textContent = rainStartMessage;
       }
 
       initialMessageTimer = window.setTimeout(() => {
         if (currentMode === MODES.OUTSIDE) {
           messageText.textContent = centralMessage;
         }
-      }, 2600);
-    }, 2200);
+      }, 2800);
+    }, 2600);
   }
 
   function setTimedMessage(message, nextMessage) {
